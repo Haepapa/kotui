@@ -43,11 +43,12 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - kotui_net
-    # Health check: poll the Ollama API until it responds.
+    # Health check: use the ollama CLI — always present in the image.
+    # `ollama list` connects to the running server; returns 0 when healthy.
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD", "ollama", "list"]
       interval: 15s
-      timeout: 5s
+      timeout: 10s
       retries: 5
       start_period: 30s
     # ── GPU support ────────────────────────────────────────────────────────────
