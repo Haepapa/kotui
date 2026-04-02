@@ -87,6 +87,14 @@
     if (!confirm('Archive this channel? It will be hidden from the sidebar.')) return;
     try {
       await archiveChannel(id);
+      // Eagerly refresh project list (event from backend also triggers this).
+      wr.projects = (await getProjects()) ?? [];
+      const active = wr.projects.find((p) => p.active);
+      if (active && active.id !== wr.activeProjectID) {
+        wr.activeProjectID = active.id;
+      } else if (wr.projects.length === 0) {
+        wr.activeProjectID = '';
+      }
     } catch (e) {
       console.error('archiveChannel:', e);
     }
@@ -284,7 +292,9 @@
     align-items: center;
     position: relative;
   }
+  .nav-item-wrap:hover { background: var(--bg-hover); }
   .nav-item-wrap:hover .channel-menu-btn { opacity: 1; }
+  .nav-item-wrap.active { background: var(--bg-active); }
 
   .nav-item {
     display: flex;
@@ -298,12 +308,12 @@
     text-align: left;
     color: var(--nav-item-color);
     font-size: 0.9375rem;
-    transition: background 0.1s, color 0.1s;
+    transition: color 0.1s;
     position: relative;
     min-height: 32px;
   }
-  .nav-item:hover { background: var(--bg-hover); color: var(--nav-item-hover); }
-  .nav-item.active { background: var(--bg-active); color: var(--nav-active-color); font-weight: 500; }
+  .nav-item:hover { color: var(--nav-item-hover); }
+  .nav-item.active { color: var(--nav-active-color); font-weight: 500; }
   .nav-hash { color: var(--channel-hash); font-size: 0.9375rem; flex-shrink: 0; line-height: 1; }
   .nav-item.active .nav-hash { color: var(--active-hash); }
   .nav-item-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -336,11 +346,11 @@
     color: var(--text-muted);
     font-size: 1rem;
     line-height: 1;
-    padding: 2px 4px;
-    border-radius: 5px;
-    transition: opacity 0.1s, background 0.1s, color 0.1s;
+    padding: 2px 6px;
+    border-radius: 0;
+    transition: opacity 0.1s, color 0.1s;
   }
-  .channel-menu-btn:hover { background: var(--bg-hover); color: var(--text-primary); opacity: 1; }
+  .channel-menu-btn:hover { color: var(--text-primary); opacity: 1; }
   .channel-dropdown {
     position: absolute;
     right: 0;
