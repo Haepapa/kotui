@@ -16,6 +16,8 @@
 
   // Which channel has its context menu open
   let menuOpenID = $state('');
+  // Which channel is showing the archive confirmation inline
+  let confirmArchiveID = $state('');
 
   $effect(() => {
     if (showNewProject && nameInput) nameInput.focus();
@@ -84,19 +86,20 @@
 
   async function handleArchive(id: string) {
     menuOpenID = '';
-    if (!confirm('Archive this channel? It will be hidden from the sidebar.')) return;
     try {
       await archiveChannel(id);
+      confirmArchiveID = '';
       // Eagerly refresh project list (event from backend also triggers this).
       wr.projects = (await getProjects()) ?? [];
       const active = wr.projects.find((p) => p.active);
       if (active && active.id !== wr.activeProjectID) {
         wr.activeProjectID = active.id;
-      } else if (wr.projects.length === 0) {
+      } else if (!active) {
         wr.activeProjectID = '';
       }
     } catch (e) {
       console.error('archiveChannel:', e);
+      confirmArchiveID = '';
     }
   }
 
@@ -160,10 +163,20 @@
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   class="channel-dropdown"
-                  onmouseleave={() => (menuOpenID = '')}
+                  onmouseleave={() => { menuOpenID = ''; confirmArchiveID = ''; }}
                 >
-                  <button class="dropdown-item" onclick={() => startRename(p)}>Rename</button>
-                  <button class="dropdown-item danger" onclick={() => handleArchive(p.id)}>Archive</button>
+                  {#if confirmArchiveID === p.id}
+                    <div class="confirm-archive">
+                      <span class="confirm-label">Hide this channel?</span>
+                      <div class="confirm-actions">
+                        <button class="dropdown-item danger confirm-yes" onclick={() => handleArchive(p.id)}>Archive</button>
+                        <button class="dropdown-item confirm-no" onclick={() => confirmArchiveID = ''}>Cancel</button>
+                      </div>
+                    </div>
+                  {:else}
+                    <button class="dropdown-item" onclick={() => startRename(p)}>Rename</button>
+                    <button class="dropdown-item danger" onclick={() => confirmArchiveID = p.id}>Archive</button>
+                  {/if}
                 </div>
               {/if}
             </div>
@@ -378,6 +391,29 @@
   .dropdown-item:hover { background: var(--bg-hover); }
   .dropdown-item.danger { color: #f87171; }
   .dropdown-item.danger:hover { background: rgba(248,113,113,0.1); }
+
+  /* Inline archive confirmation */
+  .confirm-archive {
+    padding: 0.35rem 0.5rem 0.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .confirm-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 0 0.25rem 0.1rem;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: 0.25rem;
+  }
+  .confirm-yes, .confirm-no {
+    flex: 1;
+    text-align: center;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.35rem;
+  }
 
   /* New project form */
   .new-project-form {
