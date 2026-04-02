@@ -519,15 +519,17 @@ func (s *WarRoomService) ListOllamaModels(ctx context.Context, endpoint string) 
 }
 
 // PullOllamaModel pulls a model by name from the Ollama registry.
-// Uses the configured local endpoint. Pull can take several minutes.
-func (s *WarRoomService) PullOllamaModel(ctx context.Context, name string) error {
-	cl := s.ollamaClient("")
+// Pass an empty endpoint to use the configured local endpoint.
+// Pull can take several minutes.
+func (s *WarRoomService) PullOllamaModel(ctx context.Context, endpoint, name string) error {
+	cl := s.ollamaClient(endpoint)
 	return cl.PullModel(ctx, name)
 }
 
 // DeleteOllamaModel deletes a locally-stored model by name.
-func (s *WarRoomService) DeleteOllamaModel(ctx context.Context, name string) error {
-	cl := s.ollamaClient("")
+// Pass an empty endpoint to use the configured local endpoint.
+func (s *WarRoomService) DeleteOllamaModel(ctx context.Context, endpoint, name string) error {
+	cl := s.ollamaClient(endpoint)
 	return cl.DeleteModel(ctx, name)
 }
 

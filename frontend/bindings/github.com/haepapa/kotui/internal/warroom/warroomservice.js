@@ -55,11 +55,13 @@ export function DecideApproval(id, decision) {
 
 /**
  * DeleteOllamaModel deletes a locally-stored model by name.
+ * Pass an empty endpoint to use the configured local endpoint.
+ * @param {string} endpoint
  * @param {string} name
  * @returns {$CancellablePromise<void>}
  */
-export function DeleteOllamaModel(name) {
-    return $Call.ByID(2592936139, name);
+export function DeleteOllamaModel(endpoint, name) {
+    return $Call.ByID(2592936139, endpoint, name);
 }
 
 /**
@@ -164,12 +166,14 @@ export function ListOllamaModels(endpoint) {
 
 /**
  * PullOllamaModel pulls a model by name from the Ollama registry.
- * Uses the configured local endpoint. Pull can take several minutes.
+ * Pass an empty endpoint to use the configured local endpoint.
+ * Pull can take several minutes.
+ * @param {string} endpoint
  * @param {string} name
  * @returns {$CancellablePromise<void>}
  */
-export function PullOllamaModel(name) {
-    return $Call.ByID(2538362535, name);
+export function PullOllamaModel(endpoint, name) {
+    return $Call.ByID(2538362535, endpoint, name);
 }
 
 /**

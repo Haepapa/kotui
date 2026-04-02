@@ -109,12 +109,12 @@ export function listOllamaModels(endpoint: string = ''): Promise<string[]> {
   return _ListOllamaModels(endpoint) as Promise<string[]>;
 }
 
-export function pullOllamaModel(name: string): Promise<void> {
-  return _PullOllamaModel(name);
+export function pullOllamaModel(endpoint: string, name: string): Promise<void> {
+  return _PullOllamaModel(endpoint, name);
 }
 
-export function deleteOllamaModel(name: string): Promise<void> {
-  return _DeleteOllamaModel(name);
+export function deleteOllamaModel(endpoint: string, name: string): Promise<void> {
+  return _DeleteOllamaModel(endpoint, name);
 }
 
 // --- Event subscriptions -----------------------------------------------
