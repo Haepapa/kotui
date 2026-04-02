@@ -247,23 +247,23 @@
     word-break: break-word;
   }
   .bubble-user {
-    background: #2563eb;
+    background: #2d55c8;
     border-bottom-right-radius: 4px;
-    color: #eff6ff;
+    color: #e8eeff;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 0.2rem;
   }
   .bubble-agent {
-    background: #22262f;
+    background: #1e2028;
     border-bottom-left-radius: 4px;
-    color: #cbd5e1;
-    border: 1px solid #2a2d35;
+    color: #c9cdd8;
+    border: 1px solid rgba(255,255,255,0.06);
   }
   .bubble-agent.tool {
-    background: #131a26;
-    border-color: #1e3a5f;
+    background: #111820;
+    border-color: rgba(79,124,247,0.15);
   }
   .bubble-text {
     font-size: 0.9375rem;
@@ -283,7 +283,7 @@
     width: 28px;
     height: 28px;
     border-radius: 8px;
-    background: linear-gradient(135deg, #1d4ed8, #6366f1);
+    background: linear-gradient(145deg, #2d55c8, #5b4de8);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -326,9 +326,9 @@
   }
   .milestone-text {
     font-size: 0.8125rem;
-    color: #60a5fa;
-    background: #0c1f3a;
-    border: 1px solid #1e3a5f;
+    color: #7c9ef7;
+    background: rgba(79,124,247,0.08);
+    border: 1px solid rgba(79,124,247,0.2);
     border-radius: 99px;
     padding: 0.25rem 0.875rem;
   }
@@ -405,13 +405,13 @@
     display: flex;
     align-items: flex-end;
     gap: 0.5rem;
-    background: #22262f;
-    border: 1px solid #2a2d35;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 12px;
     padding: 0.5rem 0.5rem 0.5rem 0.875rem;
     transition: border-color 0.15s;
   }
-  .composer-box:focus-within { border-color: #3b82f6; }
+  .composer-box:focus-within { border-color: rgba(79,124,247,0.5); }
   .composer-input {
     flex: 1;
     background: none;
@@ -430,9 +430,9 @@
   .send-btn {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
+    border-radius: 9px;
     border: none;
-    background: #2563eb;
+    background: #2d55c8;
     color: #fff;
     display: flex;
     align-items: center;
@@ -440,8 +440,8 @@
     flex-shrink: 0;
     transition: background 0.15s, opacity 0.15s;
   }
-  .send-btn:hover:not(:disabled) { background: #3b82f6; }
-  .send-btn:disabled { opacity: 0.3; cursor: default; }
+  .send-btn:hover:not(:disabled) { background: #3b63e0; }
+  .send-btn:disabled { opacity: 0.25; cursor: default; }
   .composer-hint {
     font-size: 0.6875rem;
     color: #334155;

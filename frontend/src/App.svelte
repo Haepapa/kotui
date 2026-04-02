@@ -70,72 +70,60 @@
 </div>
 
 <style>
-  :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
-  :global(html, body, #app) { height: 100%; overflow: hidden; }
-  :global(body) {
-    background: #1a1d23;
-    color: #e2e8f0;
-    font-family: -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  :global(button) { font-family: inherit; cursor: pointer; }
-
+  /* Shell fills the #app flex container from style.css */
   .shell {
     display: flex;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
+    background: #13151a;
+    color: #d1d5db;
   }
 
-  /* Icon rail */
+  /* Icon rail — fixed width, traffic lights at top, action icons at bottom */
   .rail {
-    width: 56px;
+    width: 52px;
     flex-shrink: 0;
-    background: #111318;
+    background: #0f1117;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 0.75rem 0;
-    gap: 0.25rem;
-    /* macOS traffic lights sit over this area */
-    padding-top: 44px;
-    height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
+    gap: 4px;
+    /* macOS traffic lights need ~44px clearance */
+    padding: 52px 0 12px;
+    overflow: hidden; /* no scroll — icons stay pinned */
   }
-  .rail::-webkit-scrollbar { display: none; }
   .rail-logo {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #4f7cf7 0%, #7c6df7 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 800;
     color: #fff;
-    margin-bottom: 0.75rem;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+    letter-spacing: -0.02em;
+  }
+  .rail-spacer { flex: 1; min-height: 0; }
+  .rail-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    color: #4b5563;
+    transition: background 0.15s, color 0.15s;
     flex-shrink: 0;
   }
-  .rail-spacer { flex: 1; }
-  .rail-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: none;
-    border: none;
-    color: #475569;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, color 0.15s;
-  }
-  .rail-btn:hover:not(:disabled) { background: #1e2029; color: #94a3b8; }
-  .rail-btn:disabled { opacity: 0.3; cursor: default; }
+  .rail-btn:hover:not(:disabled) { background: #1a1d24; color: #9ca3af; }
+  .rail-btn:disabled { opacity: 0.28; cursor: default; }
 
-  /* Content area */
+  /* Sidebar */
+  /* (Sidebar component handles its own width/bg) */
+
+  /* Content — everything right of sidebar */
   .content {
     flex: 1;
     display: flex;
@@ -143,17 +131,21 @@
     overflow: hidden;
     min-width: 0;
     min-height: 0;
-    background: #1a1d23;
+    /* Soft inner background */
+    background: #171920;
+    /* Top-right rounded corner only (left edge is the sidebar) */
+    border-radius: 0 12px 0 0;
   }
+
   .channel-header {
-    height: 48px;
+    height: 46px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     padding: 0 1rem;
-    border-bottom: 1px solid #2a2d35;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
     gap: 0.75rem;
-    background: #1a1d23;
+    background: transparent;
   }
   .channel-title {
     display: flex;
@@ -163,22 +155,19 @@
     flex: 1;
     min-width: 0;
   }
-  .channel-hash { color: #475569; font-size: 1.125rem; flex-shrink: 0; }
+  .channel-hash { color: #374151; font-size: 1.1rem; flex-shrink: 0; }
   .channel-name {
     font-size: 0.9375rem;
     font-weight: 600;
-    color: #e2e8f0;
+    color: #e5e7eb;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .channel-name-placeholder {
-    font-size: 0.9375rem;
-    color: #475569;
-  }
+  .channel-name-placeholder { font-size: 0.9375rem; color: #374151; }
   .channel-desc {
     font-size: 0.8125rem;
-    color: #64748b;
+    color: #4b5563;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -192,7 +181,7 @@
   .error-pill {
     font-size: 0.75rem;
     color: #fca5a5;
-    background: #450a0a;
+    background: #3b0a0a;
     border-radius: 99px;
     padding: 0.2rem 0.625rem;
     max-width: 220px;
@@ -206,7 +195,5 @@
     display: flex;
     overflow: hidden;
     min-height: 0;
-  }</style>
-
-
-
+  }
+</style>
