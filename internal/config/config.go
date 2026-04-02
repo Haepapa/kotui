@@ -14,11 +14,12 @@ const defaultConfigPath = "/data/config.toml"
 
 // Config is the top-level application configuration.
 type Config struct {
-	App      AppConfig      `toml:"app"`
-	Ollama   OllamaConfig   `toml:"ollama"`
-	Models   ModelsConfig   `toml:"models"`
-	Project  ProjectConfig  `toml:"project"`
-	Relay    RelayConfig    `toml:"relay"`
+	App              AppConfig              `toml:"app"`
+	Ollama           OllamaConfig           `toml:"ollama"`
+	Models           ModelsConfig           `toml:"models"`
+	SeniorConsultant SeniorConsultantConfig `toml:"senior_consultant"`
+	Project          ProjectConfig          `toml:"project"`
+	Relay            RelayConfig            `toml:"relay"`
 }
 
 // AppConfig holds general application settings.
@@ -47,7 +48,23 @@ type ProjectConfig struct {
 	ActiveProjectID string `toml:"active_project_id"`
 }
 
-// RelayConfig holds credentials for remote messaging integrations (Telegram, Slack, etc.).
+// SeniorConsultantConfig defines the on-demand Senior Consultant model.
+// This model is invoked only when the Lead signals a capability_escalation.
+// If SSHHost is set, Kotui will attempt to wake the remote machine before
+// sending the first request.
+type SeniorConsultantConfig struct {
+	// Model is the Ollama model name on the remote (or local) endpoint.
+	Model string `toml:"model"`
+	// Endpoint is the Ollama API URL for the Senior Consultant.
+	// Leave empty to use the same Ollama instance as the Lead.
+	Endpoint string `toml:"endpoint"`
+	// SSHHost is an optional SSH alias (from ~/.ssh/config) used to wake
+	// the remote machine. Leave empty to disable wake-on-demand.
+	SSHHost string `toml:"ssh_host"`
+	// SSHStartCmd is the command to run on the remote host after SSH connection.
+	SSHStartCmd string `toml:"ssh_start_cmd"`
+}
+
 // Fields are optional; an empty token disables that relay.
 type RelayConfig struct {
 	TelegramBotToken string `toml:"telegram_bot_token"`
@@ -73,6 +90,12 @@ func Defaults() Config {
 			Lead:       "qwen2.5-coder:32b",
 			Specialist: "llama3.1:8b",
 			Embedder:   "nomic-embed-text",
+		},
+		SeniorConsultant: SeniorConsultantConfig{
+			Model:       "qwen2.5-coder:32b",
+			Endpoint:    "",
+			SSHHost:     "",
+			SSHStartCmd: "ollama serve",
 		},
 		Project: ProjectConfig{},
 		Relay:   RelayConfig{},
