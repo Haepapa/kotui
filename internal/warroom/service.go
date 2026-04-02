@@ -620,7 +620,18 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 	// Call the agent directly in a goroutine — response is dispatched back to
 	// convID (the DM conversation) by HandleDirectMessage, not to the war-room.
 	go func() {
-		if err := s.orch.HandleDirectMessage(context.Background(), agentID, message, convID); err != nil {
+		// Notify the frontend that the DM agent is responding.
+		s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": convID, "busy": true})
+		defer s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": convID, "busy": false})
+
+		// onChunk forwards each streamed token to the frontend for live rendering.
+		onChunk := func(chunk string) {
+			s.app.Event.Emit("kotui:dm_stream", map[string]any{
+				"conversation_id": convID,
+				"chunk":           chunk,
+			})
+		}
+		if err := s.orch.HandleDirectMessage(context.Background(), agentID, message, convID, onChunk); err != nil {
 			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
 		}
 	}()

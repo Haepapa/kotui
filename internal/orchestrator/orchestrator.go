@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/haepapa/kotui/internal/agent"
 	"github.com/haepapa/kotui/internal/config"
@@ -293,7 +294,11 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 // Unlike HandleBossCommand, this bypasses Lead task-decomposition entirely.
 // Each agentID gets its own isolated RunningAgent with the agent's real system
 // prompt so DM history never mixes with the war-room conversation.
-func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message, convID string) error {
+//
+// onChunk, if non-nil, is called for every streamed token so the caller can
+// forward chunks to the frontend for a live typing effect. Ollama API timings
+// are dispatched as raw-tier log messages for the dev console.
+func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message, convID string, onChunk func(string)) error {
 	// Resolve the DM agent — create on first use, reuse thereafter.
 	o.dmAgentsMu.Lock()
 	if o.dmAgents == nil {
@@ -321,30 +326,41 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 		}
 	}
 
-	// Dispatch a raw "thinking" indicator so the dev window shows activity.
+	// Log the outbound Ollama API call to the dev console.
 	o.disp.Dispatch(models.Message{
 		ProjectID:      o.projectID,
 		ConversationID: convID,
 		AgentID:        agentID,
 		Kind:           models.KindSystemEvent,
 		Tier:           models.TierRaw,
-		Content:        fmt.Sprintf("[%s] thinking…", agentID),
+		Content:        fmt.Sprintf("→ POST /api/chat  model=%s  agent=%s", ra.Model, agentID),
 	})
 
-	// Call the agent directly.
-	response, err := ra.Turn(ctx, augmented)
+	start := time.Now()
+	response, err := ra.TurnStream(ctx, augmented, onChunk)
+	elapsed := time.Since(start)
+
 	if err != nil {
+		// Log the error to the dev console before returning.
+		o.disp.Dispatch(models.Message{
+			ProjectID:      o.projectID,
+			ConversationID: convID,
+			AgentID:        agentID,
+			Kind:           models.KindSystemEvent,
+			Tier:           models.TierRaw,
+			Content:        fmt.Sprintf("✗ ollama error after %.2fs: %v", elapsed.Seconds(), err),
+		})
 		return fmt.Errorf("dm %s: %w", agentID, err)
 	}
 
-	// Dispatch the raw response so the dev window can show the full text.
+	// Log timing to the dev console.
 	o.disp.Dispatch(models.Message{
 		ProjectID:      o.projectID,
 		ConversationID: convID,
 		AgentID:        agentID,
-		Kind:           models.KindAgentMessage,
+		Kind:           models.KindSystemEvent,
 		Tier:           models.TierRaw,
-		Content:        response,
+		Content:        fmt.Sprintf("← /api/chat done  %.2fs  agent=%s", elapsed.Seconds(), agentID),
 	})
 
 	// Dispatch the agent reply to the DM conversation (not the war-room convID).

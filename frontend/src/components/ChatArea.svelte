@@ -10,9 +10,10 @@
     heartbeat: HeartbeatState;
     isDM?: boolean;
     dmAgentID?: string;
+    streamContent?: string; // live-streamed token accumulation for DM
   }
 
-  let { messages, mode, isBusy, heartbeat, isDM = false, dmAgentID = '' }: Props = $props();
+  let { messages, mode, isBusy, heartbeat, isDM = false, dmAgentID = '', streamContent = '' }: Props = $props();
 
   let input = $state('');
   let sendError = $state('');
@@ -25,6 +26,31 @@
       scrollEl.scrollTop = scrollEl.scrollHeight;
     }
   });
+
+  // Also scroll when streaming content grows.
+  $effect(() => {
+    if (streamContent && scrollEl) {
+      scrollEl.scrollTop = scrollEl.scrollHeight;
+    }
+  });
+
+  // Parse <think>...</think> blocks from streamed/full content.
+  function parseThink(content: string): { thinking: string; response: string } {
+    // The think block may still be open while streaming (no closing tag yet).
+    const closedMatch = content.match(/^<think>([\s\S]*?)<\/think>\s*/);
+    if (closedMatch) {
+      return { thinking: closedMatch[1].trim(), response: content.slice(closedMatch[0].length) };
+    }
+    // Open/incomplete think block (still streaming).
+    const openMatch = content.match(/^<think>([\s\S]*)/);
+    if (openMatch) {
+      return { thinking: openMatch[1].trim(), response: '' };
+    }
+    return { thinking: '', response: content };
+  }
+
+  // Derived: split the live stream into thinking vs response parts.
+  const streamParsed = $derived(parseThink(streamContent));
 
   async function send() {
     const cmd = input.trim();
@@ -164,11 +190,38 @@
       {/if}
     {/each}
 
-    {#if isBusy}
+    <!-- Streaming bubble (DM only) — live token preview while agent is responding -->
+    {#if streamContent && isDM}
       <div class="row row-agent">
-        <div class="avatar">L</div>
+        <div class="avatar" title={dmAgentID}>{avatarInitials(dmAgentID || 'Agent')}</div>
         <div class="agent-bubble-wrap">
-          <div class="bubble-meta"><span class="bubble-sender">Lead</span></div>
+          <div class="bubble-meta">
+            <span class="bubble-sender">{dmAgentID || 'Agent'}</span>
+            <span class="streaming-badge">streaming…</span>
+          </div>
+          {#if streamParsed.thinking}
+            <details class="think-block" open>
+              <summary class="think-summary">thinking…</summary>
+              <div class="think-body">{streamParsed.thinking}</div>
+            </details>
+          {/if}
+          {#if streamParsed.response}
+            <div class="bubble bubble-agent">
+              <p class="bubble-text">{streamParsed.response}</p>
+            </div>
+          {:else if !streamParsed.thinking}
+            <div class="bubble bubble-agent">
+              <p class="bubble-text">{streamContent}</p>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {:else if isBusy}
+      <!-- Typing indicator — shown when busy but no stream content yet -->
+      <div class="row row-agent">
+        <div class="avatar">{isDM ? avatarInitials(dmAgentID || 'A') : 'L'}</div>
+        <div class="agent-bubble-wrap">
+          <div class="bubble-meta"><span class="bubble-sender">{isDM ? (dmAgentID || 'Agent') : 'Lead'}</span></div>
           <div class="bubble bubble-agent typing">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           </div>
@@ -191,7 +244,7 @@
     <div class="composer-box">
       <textarea
         class="composer-input"
-        placeholder={wr.activeProjectID ? 'Message the Lead…' : 'Select a channel first…'}
+        placeholder={wr.activeProjectID ? (isDM ? `Message ${dmAgentID || 'agent'}…` : 'Message the Lead…') : 'Select a channel first…'}
         disabled={isBusy || !wr.activeProjectID}
         bind:value={input}
         bind:this={inputEl}
@@ -382,6 +435,63 @@
     font-size: 0.8125rem;
     color: var(--text-muted);
   }
+
+  /* Streaming badge */
+  .streaming-badge {
+    font-size: 0.6875rem;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    letter-spacing: 0.04em;
+    animation: pulse-text 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse-text {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
+  /* Think block */
+  .think-block {
+    margin-bottom: 0.25rem;
+    max-width: 100%;
+  }
+  .think-summary {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0;
+  }
+  .think-summary::before {
+    content: '▸';
+    font-size: 0.625rem;
+    transition: transform 0.15s;
+  }
+  details[open] .think-summary::before {
+    transform: rotate(90deg);
+  }
+  .think-body {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    font-style: italic;
+    background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
+    border-left: 2px solid var(--border-subtle);
+    border-radius: 0 6px 6px 0;
+    padding: 0.4rem 0.625rem;
+    margin-top: 0.2rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 240px;
+    overflow-y: auto;
+    line-height: 1.5;
+  }
+  .think-body::-webkit-scrollbar { width: 3px; }
+  .think-body::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 
   /* Typing indicator */
   .typing {

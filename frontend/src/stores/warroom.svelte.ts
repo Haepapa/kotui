@@ -47,6 +47,9 @@ export const wr = $state({
   activeDMConvID: '',
   dmMessages: [] as KotuiMessage[],
   dmRawMessages: [] as KotuiMessage[],
+  // DM streaming state
+  isDMBusy: false,
+  dmStreamContent: '',   // accumulates streamed tokens; cleared when final message arrives
 });
 
 // --- Derived helpers (functions because .svelte.ts can't use $derived at module scope with runes) ---
@@ -71,6 +74,8 @@ let unsubHeartbeat: (() => void) | null = null;
 let unsubError: (() => void) | null = null;
 let unsubApproval: (() => void) | null = null;
 let unsubProjects: (() => void) | null = null;
+let unsubDMBusy: (() => void) | null = null;
+let unsubDMStream: (() => void) | null = null;
 
 export async function initWarRoom() {
   unsubMessage = onMessage((msg) => {
@@ -80,6 +85,8 @@ export async function initWarRoom() {
       if (msg.tier === 'raw') {
         wr.dmRawMessages.push(msg);
       } else {
+        // Final summary response: clear streaming content so the bubble is replaced.
+        wr.dmStreamContent = '';
         wr.dmMessages.push(msg);
       }
     } else {
@@ -118,6 +125,26 @@ export async function initWarRoom() {
     }
   });
 
+  // DM agent busy state — controls typing indicator.
+  unsubDMBusy = Events.On('kotui:dm_busy', (event: any) => {
+    const payload = event?.data as { conversation_id: string; busy: boolean };
+    if (payload?.conversation_id === wr.activeDMConvID) {
+      wr.isDMBusy = payload.busy;
+      if (!payload.busy) {
+        // Agent finished — ensure streaming content is cleared (belt-and-suspenders).
+        wr.dmStreamContent = '';
+      }
+    }
+  });
+
+  // Streaming token chunks — build up the live preview bubble.
+  unsubDMStream = Events.On('kotui:dm_stream', (event: any) => {
+    const payload = event?.data as { conversation_id: string; chunk: string };
+    if (payload?.conversation_id === wr.activeDMConvID) {
+      wr.dmStreamContent += payload.chunk;
+    }
+  });
+
   try {
     const [projects, agents, hb] = await Promise.all([
       getProjects(),
@@ -149,6 +176,8 @@ export function destroyWarRoom() {
   unsubError?.();
   unsubApproval?.();
   unsubProjects?.();
+  unsubDMBusy?.();
+  unsubDMStream?.();
 }
 
 export function toggleMode() {
@@ -178,6 +207,8 @@ export async function openDM(agentID: string) {
     if (!convID) throw new Error('No conversation ID returned');
     wr.activeDMAgentID = agentID;
     wr.activeDMConvID = convID;
+    wr.isDMBusy = false;
+    wr.dmStreamContent = '';
     const allMsgs = (await getMessages(convID, 200)) ?? [];
     wr.dmMessages = allMsgs.filter((m) => m.tier !== 'raw');
     wr.dmRawMessages = allMsgs.filter((m) => m.tier === 'raw');

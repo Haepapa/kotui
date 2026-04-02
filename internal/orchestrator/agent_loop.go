@@ -127,6 +127,83 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 	return "", fmt.Errorf("agent %s: exceeded maximum tool loop iterations (%d)", ra.AgentName, maxToolLoops)
 }
 
+// TurnStream is identical to Turn but calls onChunk for every streamed token
+// so callers can show a live typing animation or pipe output to a frontend.
+// Tool-loop iterations are also streamed. onChunk may be nil.
+func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onChunk func(string)) (string, error) {
+	ra.history = append(ra.history, ollama.ChatMessage{
+		Role:    "user",
+		Content: userContent,
+	})
+
+	for loop := 0; loop < maxToolLoops; loop++ {
+		msgs := ra.buildMessages()
+
+		ch, err := ra.inferrer.ChatStream(ctx, ollama.ChatRequest{
+			Model:     ra.Model,
+			Messages:  msgs,
+			KeepAlive: ra.KeepAlive,
+		})
+		if err != nil {
+			return "", fmt.Errorf("agent %s: inference: %w", ra.AgentName, err)
+		}
+
+		var sb strings.Builder
+		for chunk := range ch {
+			if chunk.Done {
+				break
+			}
+			sb.WriteString(chunk.Content)
+			if onChunk != nil {
+				onChunk(chunk.Content)
+			}
+		}
+		response := sb.String()
+		if response == "" {
+			return "", fmt.Errorf("agent %s: empty response from model", ra.AgentName)
+		}
+
+		if sig := parseEscalation(response); sig != nil {
+			return "", &EscalationNeededError{
+				AgentID:            ra.AgentID,
+				AgentName:          ra.AgentName,
+				Reason:             sig.Reason,
+				CapabilityRequired: sig.CapabilityRequired,
+			}
+		}
+
+		toolCall := parseToolCall(response)
+		if toolCall == nil {
+			ra.history = append(ra.history, ollama.ChatMessage{
+				Role:    "assistant",
+				Content: response,
+			})
+			return stripToolCallLines(response), nil
+		}
+
+		toolCall.ID = fmt.Sprintf("%s-loop%d", ra.AgentID, loop)
+		toolResult, execErr := ra.mcpEng.Execute(ctx, ra.Clearance, *toolCall)
+
+		ra.history = append(ra.history, ollama.ChatMessage{
+			Role:    "assistant",
+			Content: response,
+		})
+
+		var resultContent string
+		if execErr != nil {
+			resultContent = fmt.Sprintf("Tool %q failed: %v", toolCall.ToolName, execErr)
+		} else {
+			resultContent = fmt.Sprintf("Tool %q result:\n%s", toolCall.ToolName, toolResult.Output)
+		}
+		ra.history = append(ra.history, ollama.ChatMessage{
+			Role:    "user",
+			Content: resultContent,
+		})
+	}
+
+	return "", fmt.Errorf("agent %s: exceeded maximum tool loop iterations (%d)", ra.AgentName, maxToolLoops)
+}
+
 // ResetContext clears the conversation history and installs a new system prompt.
 // Called on Culture Update — the agent must receive the updated values on its
 // very next inference call.
