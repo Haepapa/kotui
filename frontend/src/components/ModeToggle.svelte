@@ -11,39 +11,30 @@
 
 <button
   class="mode-toggle"
-  class:dev={mode === 'dev'}
+  class:active={mode === 'dev'}
   onclick={ontoggle}
-  title={mode === 'boss' ? 'Switch to Dev Mode' : 'Switch to Boss Mode'}
+  title={mode === 'boss' ? 'Show agent activity' : 'Hide agent activity'}
+  aria-label={mode === 'boss' ? 'Show agent activity' : 'Hide agent activity'}
 >
-  {mode === 'boss' ? 'Boss' : 'Dev'}
+  <!-- Terminal / activity icon -->
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+    <polyline points="4 17 10 11 4 5"/>
+    <line x1="12" y1="19" x2="20" y2="19"/>
+  </svg>
 </button>
 
 <style>
   .mode-toggle {
-    background: #22262f;
-    border: 1px solid #2a2d35;
-    border-radius: 6px;
-    color: #64748b;
-    cursor: pointer;
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.25rem 0.75rem;
-    letter-spacing: 0.03em;
-    transition: all 0.15s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 28px;
-    white-space: nowrap;
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    color: var(--text-muted);
+    transition: background 0.15s, color 0.15s;
   }
-  .mode-toggle:hover {
-    border-color: #3a3d46;
-    color: #94a3b8;
-  }
-  .mode-toggle.dev {
-    background: #1e2d4a;
-    border-color: #2563eb;
-    color: #93c5fd;
+  .mode-toggle:hover { background: var(--bg-hover); color: var(--text-secondary); }
+  .mode-toggle.active {
+    background: var(--bg-active);
+    color: var(--accent);
   }
 </style>
 

@@ -8,6 +8,104 @@
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
   -webkit-user-select: none;
+
+  /* Design tokens — dark (default) */
+  --titlebar-h: 44px;
+  --bg-app: #13151a;
+  --bg-rail: #0f1117;
+  --bg-sidebar: #0f1117;
+  --bg-content: #171920;
+  --bg-surface: rgba(255,255,255,0.05);
+  --bg-hover: rgba(255,255,255,0.04);
+  --bg-active: rgba(79,124,247,0.1);
+  --bg-console: #0e1017;
+  --border-subtle: rgba(255,255,255,0.05);
+  --border-input: rgba(255,255,255,0.08);
+  --border-console: #1e2029;
+  --text-primary: #d1d5db;
+  --text-secondary: #6b7280;
+  --text-muted: #374151;
+  --text-heading: #e5e7eb;
+  --accent: #4f7cf7;
+  --accent-btn: #2d55c8;
+  --accent-btn-hover: #3b63e0;
+  --bubble-user-bg: #2d55c8;
+  --bubble-user-text: #e8eeff;
+  --bubble-agent-bg: #1e2028;
+  --bubble-agent-text: #c9cdd8;
+  --bubble-agent-border: rgba(255,255,255,0.06);
+  --bubble-tool-bg: #111820;
+  --bubble-tool-border: rgba(79,124,247,0.15);
+  --scrollbar-thumb: rgba(255,255,255,0.07);
+  --placeholder-color: #475569;
+  --milestone-color: #7c9ef7;
+  --milestone-bg: rgba(79,124,247,0.08);
+  --milestone-border: rgba(79,124,247,0.2);
+  --typing-dot-color: #475569;
+  --status-online: #22c55e;
+  --status-busy: #facc15;
+  --composer-hint: #334155;
+  --channel-hash: #374151;
+  --active-hash: #7c9ef7;
+  --channel-desc: #4b5563;
+  --nav-label-color: #374151;
+  --nav-item-color: #6b7280;
+  --nav-item-hover: #9ca3af;
+  --nav-active-color: #c7d7fe;
+  --agent-name-color: #6b7280;
+  --agent-model-color: #374151;
+  --agent-avatar-bg: rgba(255,255,255,0.07);
+  --agent-avatar-text: #9ca3af;
+  --rail-icon-color: #4b5563;
+  --rail-icon-hover-bg: #1a1d24;
+  --rail-icon-hover-color: #9ca3af;
+}
+
+/* Light theme overrides */
+html[data-theme="light"] {
+  --bg-app: #f0f2f5;
+  --bg-rail: #e0e3ea;
+  --bg-sidebar: #e8eaee;
+  --bg-content: #ffffff;
+  --bg-surface: rgba(0,0,0,0.05);
+  --bg-hover: rgba(0,0,0,0.04);
+  --bg-active: rgba(79,124,247,0.1);
+  --bg-console: #f5f5f7;
+  --border-subtle: rgba(0,0,0,0.07);
+  --border-input: rgba(0,0,0,0.12);
+  --border-console: #e0e0e3;
+  --text-primary: #1a1d23;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --text-heading: #111318;
+  --bubble-agent-bg: #f3f4f6;
+  --bubble-agent-text: #1a1d23;
+  --bubble-agent-border: rgba(0,0,0,0.07);
+  --bubble-tool-bg: #eef0f4;
+  --bubble-tool-border: rgba(79,124,247,0.2);
+  --scrollbar-thumb: rgba(0,0,0,0.1);
+  --placeholder-color: #9ca3af;
+  --milestone-color: #4f7cf7;
+  --milestone-bg: rgba(79,124,247,0.06);
+  --milestone-border: rgba(79,124,247,0.2);
+  --typing-dot-color: #9ca3af;
+  --status-online: #16a34a;
+  --status-busy: #d97706;
+  --composer-hint: #9ca3af;
+  --channel-hash: #9ca3af;
+  --active-hash: #4f7cf7;
+  --channel-desc: #9ca3af;
+  --nav-label-color: #9ca3af;
+  --nav-item-color: #374151;
+  --nav-item-hover: #111318;
+  --nav-active-color: #2d55c8;
+  --agent-name-color: #374151;
+  --agent-model-color: #9ca3af;
+  --agent-avatar-bg: rgba(0,0,0,0.1);
+  --agent-avatar-text: #6b7280;
+  --rail-icon-color: #6b7280;
+  --rail-icon-hover-bg: #d1d5db;
+  --rail-icon-hover-color: #374151;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,7 +114,7 @@ html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: #1a1c22;
+  background: var(--bg-app);
 }
 
 /* #app must fill the full window — no centering, no padding, no max-width */

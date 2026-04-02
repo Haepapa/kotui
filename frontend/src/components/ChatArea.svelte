@@ -199,7 +199,7 @@
   .messages {
     flex: 1;
     overflow-y: auto;
-    padding: 1.5rem 1.25rem 0.5rem;
+    padding: 1.5rem 1.5rem 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -208,7 +208,7 @@
   }
   .messages::-webkit-scrollbar { width: 4px; }
   .messages::-webkit-scrollbar-track { background: transparent; }
-  .messages::-webkit-scrollbar-thumb { background: #2a2d35; border-radius: 4px; }
+  .messages::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
 
   /* Empty state */
   .empty {
@@ -218,12 +218,12 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    color: #475569;
+    color: var(--text-muted);
     padding: 4rem 0;
     text-align: center;
   }
   .empty-icon { margin-bottom: 0.25rem; }
-  .empty-title { font-size: 0.9375rem; font-weight: 500; color: #64748b; }
+  .empty-title { font-size: 0.9375rem; font-weight: 500; color: var(--text-secondary); }
   .empty-sub { font-size: 0.8125rem; }
 
   /* Message rows */
@@ -247,23 +247,23 @@
     word-break: break-word;
   }
   .bubble-user {
-    background: #2d55c8;
+    background: var(--bubble-user-bg);
     border-bottom-right-radius: 4px;
-    color: #e8eeff;
+    color: var(--bubble-user-text);
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 0.2rem;
   }
   .bubble-agent {
-    background: #1e2028;
+    background: var(--bubble-agent-bg);
     border-bottom-left-radius: 4px;
-    color: #c9cdd8;
-    border: 1px solid rgba(255,255,255,0.06);
+    color: var(--bubble-agent-text);
+    border: 1px solid var(--bubble-agent-border);
   }
   .bubble-agent.tool {
-    background: #111820;
-    border-color: rgba(79,124,247,0.15);
+    background: var(--bubble-tool-bg);
+    border-color: var(--bubble-tool-border);
   }
   .bubble-text {
     font-size: 0.9375rem;
@@ -308,12 +308,12 @@
   .bubble-sender {
     font-size: 0.75rem;
     font-weight: 600;
-    color: #64748b;
+    color: var(--text-secondary);
   }
   .kind-chip {
     font-size: 0.625rem;
-    background: #1e293b;
-    color: #475569;
+    background: var(--bg-surface);
+    color: var(--text-muted);
     border-radius: 3px;
     padding: 0.1rem 0.35rem;
     letter-spacing: 0.04em;
@@ -326,9 +326,9 @@
   }
   .milestone-text {
     font-size: 0.8125rem;
-    color: #7c9ef7;
-    background: rgba(79,124,247,0.08);
-    border: 1px solid rgba(79,124,247,0.2);
+    color: var(--milestone-color);
+    background: var(--milestone-bg);
+    border: 1px solid var(--milestone-border);
     border-radius: 99px;
     padding: 0.25rem 0.875rem;
   }
@@ -338,7 +338,7 @@
   }
   .system-event-text {
     font-size: 0.75rem;
-    color: #475569;
+    color: var(--text-muted);
   }
 
   /* Typing indicator */
@@ -352,7 +352,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #475569;
+    background: var(--typing-dot-color);
     animation: bounce 1.2s ease-in-out infinite;
   }
   .dot:nth-child(2) { animation-delay: 0.2s; }
@@ -367,19 +367,19 @@
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.25rem 1.375rem;
+    padding: 0.25rem 1.5rem;
     flex-shrink: 0;
   }
   .status-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #22c55e;
+    background: var(--status-online);
     flex-shrink: 0;
     transition: background 0.3s;
   }
   .status-dot.busy {
-    background: #facc15;
+    background: var(--status-busy);
     animation: pulse-dot 1s ease-in-out infinite;
   }
   @keyframes pulse-dot {
@@ -388,12 +388,12 @@
   }
   .status-label {
     font-size: 0.6875rem;
-    color: #475569;
+    color: var(--text-secondary);
   }
 
   /* Composer — fixed at bottom, never pushes messages */
   .composer {
-    padding: 0 1rem 0.875rem;
+    padding: 0 1.25rem 1.25rem;
     flex-shrink: 0;
   }
   .send-error {
@@ -405,8 +405,8 @@
     display: flex;
     align-items: flex-end;
     gap: 0.5rem;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-input);
     border-radius: 12px;
     padding: 0.5rem 0.5rem 0.5rem 0.875rem;
     transition: border-color 0.15s;
@@ -416,7 +416,7 @@
     flex: 1;
     background: none;
     border: none;
-    color: #e2e8f0;
+    color: var(--text-heading);
     font-size: 0.9375rem;
     line-height: 1.5;
     outline: none;
@@ -425,14 +425,14 @@
     max-height: 160px;
     font-family: inherit;
   }
-  .composer-input::placeholder { color: #475569; }
+  .composer-input::placeholder { color: var(--placeholder-color); }
   .composer-input:disabled { opacity: 0.45; }
   .send-btn {
     width: 34px;
     height: 34px;
     border-radius: 9px;
     border: none;
-    background: #2d55c8;
+    background: var(--accent-btn);
     color: #fff;
     display: flex;
     align-items: center;
@@ -440,11 +440,11 @@
     flex-shrink: 0;
     transition: background 0.15s, opacity 0.15s;
   }
-  .send-btn:hover:not(:disabled) { background: #3b63e0; }
+  .send-btn:hover:not(:disabled) { background: var(--accent-btn-hover); }
   .send-btn:disabled { opacity: 0.25; cursor: default; }
   .composer-hint {
     font-size: 0.6875rem;
-    color: #334155;
+    color: var(--composer-hint);
     text-align: right;
     margin-top: 0.3rem;
   }

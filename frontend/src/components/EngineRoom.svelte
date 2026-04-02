@@ -58,8 +58,8 @@
   .engine-room {
     width: 280px;
     flex-shrink: 0;
-    background: #0e1017;
-    border-left: 1px solid #1e2029;
+    background: var(--bg-console);
+    border-left: 1px solid var(--border-console);
     display: flex;
     flex-direction: column;
     font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
@@ -69,14 +69,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #1e2029;
+    border-bottom: 1px solid var(--border-console);
     flex-shrink: 0;
   }
-  .er-title { font-size: 0.75rem; color: #475569; font-weight: 600; letter-spacing: 0.04em; }
+  .er-title { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.04em; }
   .er-count {
     font-size: 0.6875rem;
-    background: #1e2029;
-    color: #475569;
+    background: var(--border-console);
+    color: var(--text-secondary);
     border-radius: 10px;
     padding: 0.1rem 0.4rem;
   }
@@ -89,7 +89,7 @@
     gap: 0.1rem;
   }
   .er-console::-webkit-scrollbar { width: 4px; }
-  .er-console::-webkit-scrollbar-thumb { background: #1e2029; border-radius: 4px; }
+  .er-console::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
   .log-line {
     display: flex;
     gap: 0.375rem;
@@ -98,10 +98,10 @@
     align-items: baseline;
     flex-wrap: wrap;
   }
-  .log-time { color: #2a2d35; white-space: nowrap; }
+  .log-time { color: var(--text-muted); white-space: nowrap; }
   .log-kind { font-weight: 600; white-space: nowrap; }
   .log-agent { color: #60a5fa; white-space: nowrap; }
-  .log-content { color: #475569; word-break: break-word; flex: 1; min-width: 0; }
-  .er-empty { font-size: 0.6875rem; color: #1e2029; padding: 1rem; text-align: center; }
+  .log-content { color: var(--text-secondary); word-break: break-word; flex: 1; min-width: 0; }
+  .er-empty { font-size: 0.6875rem; color: var(--text-muted); padding: 1rem; text-align: center; }
 </style>
 

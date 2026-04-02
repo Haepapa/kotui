@@ -44,12 +44,6 @@
 </script>
 
 <aside class="sidebar">
-  <!-- Brand / workspace -->
-  <div class="workspace-header">
-    <div class="workspace-logo">K</div>
-    <span class="workspace-name">Kōtui</span>
-  </div>
-
   <!-- Scrollable body: channels + agents -->
   <div class="sidebar-scroll">
     <!-- Channels (projects) -->
@@ -129,44 +123,15 @@
   .sidebar {
     width: 232px;
     flex-shrink: 0;
-    background: #0f1117;
-    border-right: 1px solid rgba(255,255,255,0.04);
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
     overflow: hidden;
-  }
-
-  /* Workspace header — fixed, never scrolls */
-  .workspace-header {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    padding: 0.75rem 0.875rem;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
-    flex-shrink: 0;
-  }
-  .workspace-logo {
-    width: 26px;
-    height: 26px;
-    border-radius: 7px;
-    background: linear-gradient(145deg, #4f7cf7, #7c6df7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.8125rem;
-    font-weight: 800;
-    color: #fff;
-    flex-shrink: 0;
-  }
-  .workspace-name {
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: #d1d5db;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* Clear macOS traffic lights */
+    padding-top: var(--titlebar-h);
   }
 
   /* Scrollable content area */
@@ -178,7 +143,7 @@
   }
   .sidebar-scroll::-webkit-scrollbar { width: 3px; }
   .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
-  .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 4px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
 
   /* Nav sections */
   .nav-section {
@@ -190,58 +155,58 @@
     font-size: 0.625rem;
     font-weight: 700;
     letter-spacing: 0.09em;
-    color: #374151;
-    padding: 0 0.875rem 0.375rem;
+    color: var(--nav-label-color);
+    padding: 0 1rem 0.375rem;
     text-transform: uppercase;
   }
   .nav-item {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.3rem 0.875rem;
+    padding: 0.3rem 1rem;
     border: none;
     background: none;
     cursor: pointer;
     width: 100%;
     text-align: left;
-    color: #6b7280;
+    color: var(--nav-item-color);
     font-size: 0.875rem;
     transition: background 0.1s, color 0.1s;
     position: relative;
     min-height: 30px;
   }
-  .nav-item:hover { background: rgba(255,255,255,0.04); color: #9ca3af; }
-  .nav-item.active { background: rgba(79,124,247,0.1); color: #c7d7fe; font-weight: 500; }
-  .nav-hash { color: #374151; font-size: 0.9375rem; flex-shrink: 0; line-height: 1; }
-  .nav-item.active .nav-hash { color: #7c9ef7; }
+  .nav-item:hover { background: var(--bg-hover); color: var(--nav-item-hover); }
+  .nav-item.active { background: var(--bg-active); color: var(--nav-active-color); font-weight: 500; }
+  .nav-hash { color: var(--channel-hash); font-size: 0.9375rem; flex-shrink: 0; line-height: 1; }
+  .nav-item.active .nav-hash { color: var(--active-hash); }
   .nav-item-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .active-pip {
     width: 2px;
     height: 14px;
-    background: #4f7cf7;
+    background: var(--accent);
     border-radius: 2px;
     position: absolute;
     left: 0;
     top: 50%;
     transform: translateY(-50%);
   }
-  .add-item { color: #374151; }
-  .add-item:hover { color: #6b7280; }
+  .add-item { color: var(--text-muted); }
+  .add-item:hover { color: var(--nav-item-color); }
   .add-icon { font-size: 1rem; line-height: 1; flex-shrink: 0; }
-  .nav-empty { font-size: 0.8125rem; color: #1f2937; padding: 0.375rem 0.875rem; }
+  .nav-empty { font-size: 0.8125rem; color: var(--text-muted); padding: 0.375rem 1rem; }
 
   /* New project form */
   .new-project-form {
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
-    padding: 0.375rem 0.625rem;
+    padding: 0.375rem 0.75rem;
   }
   .form-input {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-input);
     border-radius: 7px;
-    color: #d1d5db;
+    color: var(--text-primary);
     font-size: 0.8125rem;
     padding: 0.35rem 0.625rem;
     outline: none;
@@ -249,45 +214,45 @@
     transition: border-color 0.15s;
     font-family: inherit;
   }
-  .form-input:focus { border-color: #4f7cf7; }
+  .form-input:focus { border-color: var(--accent); }
   .form-actions { display: flex; gap: 0.375rem; }
   .btn-sm {
     flex: 1;
     padding: 0.35rem 0;
     font-size: 0.8125rem;
     border-radius: 7px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(255,255,255,0.05);
-    color: #9ca3af;
+    border: 1px solid var(--border-input);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.12s, color 0.12s;
   }
-  .btn-sm:hover { background: rgba(255,255,255,0.09); color: #e5e7eb; }
-  .btn-sm.primary { background: #2d55c8; color: #e0e9ff; border-color: #3b63e0; }
-  .btn-sm.primary:hover { background: #3b63e0; }
+  .btn-sm:hover { background: var(--bg-hover); color: var(--text-heading); }
+  .btn-sm.primary { background: var(--accent-btn); color: #e0e9ff; border-color: var(--accent-btn-hover); }
+  .btn-sm.primary:hover { background: var(--accent-btn-hover); }
 
   /* Agent items */
   .agent-item {
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    padding: 0.3rem 0.875rem;
+    padding: 0.3rem 1rem;
     min-height: 34px;
   }
   .agent-avatar {
     width: 22px;
     height: 22px;
     border-radius: 6px;
-    background: rgba(255,255,255,0.07);
+    background: var(--agent-avatar-bg);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 0.5625rem;
     font-weight: 700;
-    color: #9ca3af;
+    color: var(--agent-avatar-text);
     flex-shrink: 0;
     position: relative;
   }
@@ -298,9 +263,9 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    border: 2px solid #0f1117;
+    border: 2px solid var(--bg-sidebar);
   }
   .agent-text { flex: 1; overflow: hidden; }
-  .agent-name { font-size: 0.8125rem; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .agent-model { font-size: 0.6875rem; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-name { font-size: 0.8125rem; color: var(--agent-name-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-model { font-size: 0.6875rem; color: var(--agent-model-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
