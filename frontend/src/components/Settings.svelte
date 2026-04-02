@@ -33,8 +33,9 @@
   type OllamaState = {
     models: string[];
     loading: boolean;
-    error: string;
-    connected: boolean | null; // null = unchecked
+    opError: string;       // errors from pull/delete operations only
+    connected: boolean | null; // null = unchecked / not configured
+    configured: boolean;   // false = no endpoint entered yet
     pullName: string;
     pullStatus: 'idle' | 'pulling' | 'done' | 'error';
     pullError: string;
@@ -42,7 +43,8 @@
   };
 
   function freshState(): OllamaState {
-    return { models: [], loading: false, error: '', connected: null, pullName: '', pullStatus: 'idle', pullError: '', deleting: '' };
+    return { models: [], loading: false, opError: '', connected: null, configured: true,
+             pullName: '', pullStatus: 'idle', pullError: '', deleting: '' };
   }
 
   let local = $state<OllamaState>(freshState());
@@ -55,18 +57,36 @@
     } catch (e) {
       console.error('getConfig:', e);
     }
-    // Check both endpoints after config loads
-    await Promise.all([refreshModels(local, ''), refreshModels(remote, cfg.senior_endpoint)]);
+    // Local always checks (falls back to localhost:11434 if blank).
+    // Remote only checks if an endpoint has been configured.
+    await Promise.all([
+      refreshModels(local, cfg.ollama_endpoint || ''),
+      cfg.senior_endpoint ? refreshModels(remote, cfg.senior_endpoint) : markUnconfigured(remote),
+    ]);
   });
 
+  function markUnconfigured(state: OllamaState) {
+    state.configured = false;
+    state.connected = null;
+    state.models = [];
+  }
+
   async function refreshModels(state: OllamaState, endpoint: string) {
+    // If no endpoint is given for remote, mark as not configured rather than
+    // silently falling back to local — that would give a false positive.
+    if (!endpoint && state === remote) {
+      markUnconfigured(state);
+      return;
+    }
     state.loading = true;
-    state.error = '';
+    state.configured = true;
+    state.opError = '';
     try {
       state.models = (await listOllamaModels(endpoint)) ?? [];
       state.connected = true;
-    } catch (e) {
-      state.error = e instanceof Error ? e.message : String(e);
+    } catch (_e) {
+      // Don't surface the raw error here; the dot indicator already communicates
+      // connection failure. Raw errors are reserved for pull/delete operations.
       state.models = [];
       state.connected = false;
     } finally {
@@ -75,7 +95,7 @@
   }
 
   async function handlePull(state: OllamaState, endpoint: string) {
-    if (!state.pullName.trim()) return;
+    if (!state.pullName.trim() || !state.connected) return;
     state.pullStatus = 'pulling';
     state.pullError = '';
     try {
@@ -93,11 +113,12 @@
   async function handleDelete(state: OllamaState, endpoint: string, name: string) {
     if (!confirm(`Delete model "${name}"? This cannot be undone.`)) return;
     state.deleting = name;
+    state.opError = '';
     try {
       await deleteOllamaModel(endpoint, name);
       await refreshModels(state, endpoint);
     } catch (e) {
-      state.error = e instanceof Error ? e.message : String(e);
+      state.opError = e instanceof Error ? e.message : String(e);
     } finally {
       state.deleting = '';
     }
@@ -151,7 +172,7 @@
 
       <label>
         <span>Lead Model</span>
-        <select bind:value={cfg.lead_model} class="model-select">
+        <select bind:value={cfg.lead_model} class="model-select" disabled={local.connected !== true}>
           {#if cfg.lead_model && !local.models.includes(cfg.lead_model)}
             <option value={cfg.lead_model}>{cfg.lead_model}</option>
           {/if}
@@ -164,7 +185,7 @@
 
       <label>
         <span>Worker Model</span>
-        <select bind:value={cfg.worker_model} class="model-select">
+        <select bind:value={cfg.worker_model} class="model-select" disabled={local.connected !== true}>
           {#if cfg.worker_model && !local.models.includes(cfg.worker_model)}
             <option value={cfg.worker_model}>{cfg.worker_model}</option>
           {/if}
@@ -177,7 +198,7 @@
 
       <label>
         <span>Embedder Model</span>
-        <select bind:value={cfg.embedder_model} class="model-select">
+        <select bind:value={cfg.embedder_model} class="model-select" disabled={local.connected !== true}>
           {#if cfg.embedder_model && !local.models.includes(cfg.embedder_model)}
             <option value={cfg.embedder_model}>{cfg.embedder_model}</option>
           {/if}
@@ -188,50 +209,52 @@
         </select>
       </label>
 
-      <div class="subsection-label">
-        Pull model
-      </div>
-      <label>
-        <span>Model name</span>
-        <div class="input-row">
-          <input
-            bind:value={local.pullName}
-            placeholder="e.g. llama3.2:3b"
-            onkeydown={(e) => { if (e.key === 'Enter') handlePull(local, cfg.ollama_endpoint); }}
-            disabled={local.pullStatus === 'pulling'}
-          />
-          <button class="icon-btn accent" onclick={() => handlePull(local, cfg.ollama_endpoint)}
-            disabled={local.pullStatus === 'pulling' || !local.pullName.trim()} title="Pull model">
-            {local.pullStatus === 'pulling' ? '…' : '↓'}
-          </button>
-        </div>
-      </label>
-      {#if local.pullStatus === 'pulling'}
-        <p class="status-note">Pulling — this may take several minutes…</p>
-      {:else if local.pullStatus === 'done'}
-        <p class="status-note success">Pulled successfully.</p>
-      {:else if local.pullStatus === 'error'}
-        <p class="status-note danger">{local.pullError}</p>
-      {/if}
-
-      <div class="subsection-label">
-        Installed models
-        {#if local.error}<span class="inline-error">— {local.error}</span>{/if}
-      </div>
-      {#if local.models.length === 0 && !local.loading}
-        <p class="status-note">No models found. Is Ollama running?</p>
+      {#if local.connected === false}
+        <p class="status-note service-down">Ollama service is unreachable. Start Ollama and click ↻ to reconnect.</p>
       {:else}
-        <div class="model-list">
-          {#each local.models as m}
-            <div class="model-row">
-              <span class="model-name">{m}</span>
-              <button class="delete-btn" onclick={() => handleDelete(local, cfg.ollama_endpoint, m)}
-                disabled={local.deleting === m} title="Delete model">
-                {local.deleting === m ? '…' : '✕'}
-              </button>
-            </div>
-          {/each}
+        <div class="subsection-label">Pull model</div>
+        <label>
+          <span>Model name</span>
+          <div class="input-row">
+            <input
+              bind:value={local.pullName}
+              placeholder="e.g. llama3.2:3b"
+              onkeydown={(e) => { if (e.key === 'Enter') handlePull(local, cfg.ollama_endpoint); }}
+              disabled={local.pullStatus === 'pulling'}
+            />
+            <button class="icon-btn accent" onclick={() => handlePull(local, cfg.ollama_endpoint)}
+              disabled={local.pullStatus === 'pulling' || !local.pullName.trim()} title="Pull model">
+              {local.pullStatus === 'pulling' ? '…' : '↓'}
+            </button>
+          </div>
+        </label>
+        {#if local.pullStatus === 'pulling'}
+          <p class="status-note">Pulling — this may take several minutes…</p>
+        {:else if local.pullStatus === 'done'}
+          <p class="status-note success">Pulled successfully.</p>
+        {:else if local.pullStatus === 'error'}
+          <p class="status-note danger">{local.pullError}</p>
+        {/if}
+
+        <div class="subsection-label">
+          Installed models
+          {#if local.opError}<span class="inline-error">— {local.opError}</span>{/if}
         </div>
+        {#if local.models.length === 0 && !local.loading}
+          <p class="status-note">No models installed.</p>
+        {:else}
+          <div class="model-list">
+            {#each local.models as m}
+              <div class="model-row">
+                <span class="model-name">{m}</span>
+                <button class="delete-btn" onclick={() => handleDelete(local, cfg.ollama_endpoint, m)}
+                  disabled={local.deleting === m} title="Delete model">
+                  {local.deleting === m ? '…' : '✕'}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
     </section>
 
@@ -264,7 +287,7 @@
 
       <label>
         <span>Lead Model</span>
-        <select bind:value={cfg.senior_model} class="model-select">
+        <select bind:value={cfg.senior_model} class="model-select" disabled={remote.connected !== true}>
           {#if cfg.senior_model && !remote.models.includes(cfg.senior_model)}
             <option value={cfg.senior_model}>{cfg.senior_model}</option>
           {/if}
@@ -284,50 +307,54 @@
         <input bind:value={cfg.senior_ssh_cmd} placeholder="ollama serve" />
       </label>
 
-      <div class="subsection-label">Pull model</div>
-      <label>
-        <span>Model name</span>
-        <div class="input-row">
-          <input
-            bind:value={remote.pullName}
-            placeholder="e.g. qwen2.5-coder:32b"
-            onkeydown={(e) => { if (e.key === 'Enter') handlePull(remote, cfg.senior_endpoint); }}
-            disabled={remote.pullStatus === 'pulling'}
-          />
-          <button class="icon-btn accent" onclick={() => handlePull(remote, cfg.senior_endpoint)}
-            disabled={remote.pullStatus === 'pulling' || !remote.pullName.trim()} title="Pull model">
-            {remote.pullStatus === 'pulling' ? '…' : '↓'}
-          </button>
-        </div>
-      </label>
-      {#if remote.pullStatus === 'pulling'}
-        <p class="status-note">Pulling — this may take several minutes…</p>
-      {:else if remote.pullStatus === 'done'}
-        <p class="status-note success">Pulled successfully.</p>
-      {:else if remote.pullStatus === 'error'}
-        <p class="status-note danger">{remote.pullError}</p>
-      {/if}
+      {#if !remote.configured}
+        <p class="status-note">Enter an endpoint above to manage remote models.</p>
+      {:else if remote.connected === false}
+        <p class="status-note service-down">Remote Ollama service is unreachable. Check the endpoint and click ↻.</p>
+      {:else if remote.connected === true}
+        <div class="subsection-label">Pull model</div>
+        <label>
+          <span>Model name</span>
+          <div class="input-row">
+            <input
+              bind:value={remote.pullName}
+              placeholder="e.g. qwen2.5-coder:32b"
+              onkeydown={(e) => { if (e.key === 'Enter') handlePull(remote, cfg.senior_endpoint); }}
+              disabled={remote.pullStatus === 'pulling'}
+            />
+            <button class="icon-btn accent" onclick={() => handlePull(remote, cfg.senior_endpoint)}
+              disabled={remote.pullStatus === 'pulling' || !remote.pullName.trim()} title="Pull model">
+              {remote.pullStatus === 'pulling' ? '…' : '↓'}
+            </button>
+          </div>
+        </label>
+        {#if remote.pullStatus === 'pulling'}
+          <p class="status-note">Pulling — this may take several minutes…</p>
+        {:else if remote.pullStatus === 'done'}
+          <p class="status-note success">Pulled successfully.</p>
+        {:else if remote.pullStatus === 'error'}
+          <p class="status-note danger">{remote.pullError}</p>
+        {/if}
 
-      <div class="subsection-label">
-        Installed models
-        {#if remote.error}<span class="inline-error">— {remote.error}</span>{/if}
-      </div>
-      {#if remote.models.length === 0 && !remote.loading}
-        <p class="status-note">
-          {cfg.senior_endpoint ? 'No models found on remote endpoint.' : 'Configure an endpoint above to manage remote models.'}
-        </p>
-      {:else}
-        <div class="model-list">
-          {#each remote.models as m}
-            <div class="model-row">
-              <span class="model-name">{m}</span>
-              <button class="delete-btn" onclick={() => handleDelete(remote, cfg.senior_endpoint, m)}
-                disabled={remote.deleting === m} title="Delete model">
-                {remote.deleting === m ? '…' : '✕'}
-              </button>
-            </div>
-          {/each}
+        <div class="subsection-label">
+          Installed models
+          {#if remote.opError}<span class="inline-error">— {remote.opError}</span>{/if}
         </div>
+        {#if remote.models.length === 0 && !remote.loading}
+          <p class="status-note">No models installed on remote.</p>
+        {:else}
+          <div class="model-list">
+            {#each remote.models as m}
+              <div class="model-row">
+                <span class="model-name">{m}</span>
+                <button class="delete-btn" onclick={() => handleDelete(remote, cfg.senior_endpoint, m)}
+                  disabled={remote.deleting === m} title="Delete model">
+                  {remote.deleting === m ? '…' : '✕'}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
     </section>
 
@@ -575,6 +602,7 @@
   }
   .status-note.success { color: #4ade80; }
   .status-note.danger  { color: #f87171; }
+  .status-note.service-down { color: var(--text-muted); padding-left: 0; font-style: italic; }
 
   .settings-footer {
     display: flex;

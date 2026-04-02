@@ -505,7 +505,11 @@ func (s *WarRoomService) ollamaClient(endpoint string) *ollama.Client {
 
 // ListOllamaModels returns all model names available on the given Ollama endpoint.
 // Pass an empty endpoint to use the configured local endpoint.
+// Returns an error with the prefix "no endpoint" if endpoint is the sentinel value "none".
 func (s *WarRoomService) ListOllamaModels(ctx context.Context, endpoint string) ([]string, error) {
+	if endpoint == "none" {
+		return nil, fmt.Errorf("no endpoint configured")
+	}
 	cl := s.ollamaClient(endpoint)
 	models, err := cl.ListModels(ctx)
 	if err != nil {
