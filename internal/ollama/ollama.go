@@ -273,9 +273,60 @@ func (c *Client) FindModel(ctx context.Context, name string) (*ModelInfo, error)
 	return nil, nil
 }
 
-// --- Embeddings -----------------------------------------------------------
+// --- Model management -----------------------------------------------------
 
-// Embed generates an embedding vector for the given text using the specified model.
+// PullModel pulls (downloads) a model by name from the Ollama registry.
+// The call blocks until the pull completes or ctx is cancelled.
+func (c *Client) PullModel(ctx context.Context, name string) error {
+	if name == "" {
+		return fmt.Errorf("ollama: model name must not be empty")
+	}
+	body, _ := json.Marshal(map[string]any{"name": name, "stream": false})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url("/api/pull"), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("ollama: pull %q: %w", name, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("ollama: pull %q HTTP %d: %s", name, resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	io.ReadAll(resp.Body)
+	return nil
+}
+
+// DeleteModel removes a locally-stored model by name.
+func (c *Client) DeleteModel(ctx context.Context, name string) error {
+	if name == "" {
+		return fmt.Errorf("ollama: model name must not be empty")
+	}
+	body, _ := json.Marshal(map[string]string{"name": name})
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.url("/api/delete"), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	req = req.WithContext(tctx)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("ollama: delete %q: %w", name, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("ollama: delete %q HTTP %d: %s", name, resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
+}
+
+// --- Embeddings -----------------------------------------------------------
 func (c *Client) Embed(ctx context.Context, model, text string) ([]float32, error) {
 	tctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()

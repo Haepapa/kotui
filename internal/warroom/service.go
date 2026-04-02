@@ -25,6 +25,7 @@ import (
 	"github.com/haepapa/kotui/internal/config"
 	"github.com/haepapa/kotui/internal/dispatcher"
 	"github.com/haepapa/kotui/internal/memory"
+	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/internal/orchestrator"
 	"github.com/haepapa/kotui/internal/store"
 	"github.com/haepapa/kotui/pkg/models"
@@ -485,6 +486,49 @@ func (s *WarRoomService) SaveConfig(ctx context.Context, uiCfg UIConfig) error {
 		return fmt.Errorf("warroom: save config: encode: %w", err)
 	}
 	return nil
+}
+
+// ollamaClient returns an Ollama client for the given endpoint.
+// Falls back to the configured local endpoint if endpoint is empty.
+func (s *WarRoomService) ollamaClient(endpoint string) *ollama.Client {
+	ep := endpoint
+	if ep == "" {
+		s.mu.RLock()
+		ep = s.cfg.Ollama.Endpoint
+		s.mu.RUnlock()
+	}
+	if ep == "" {
+		ep = "http://localhost:11434"
+	}
+	return ollama.New(ep)
+}
+
+// ListOllamaModels returns all model names available on the given Ollama endpoint.
+// Pass an empty endpoint to use the configured local endpoint.
+func (s *WarRoomService) ListOllamaModels(ctx context.Context, endpoint string) ([]string, error) {
+	cl := s.ollamaClient(endpoint)
+	models, err := cl.ListModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(models))
+	for i, m := range models {
+		names[i] = m.Name
+	}
+	return names, nil
+}
+
+// PullOllamaModel pulls a model by name from the Ollama registry.
+// Uses the configured local endpoint. Pull can take several minutes.
+func (s *WarRoomService) PullOllamaModel(ctx context.Context, name string) error {
+	cl := s.ollamaClient("")
+	return cl.PullModel(ctx, name)
+}
+
+// DeleteOllamaModel deletes a locally-stored model by name.
+func (s *WarRoomService) DeleteOllamaModel(ctx context.Context, name string) error {
+	cl := s.ollamaClient("")
+	return cl.DeleteModel(ctx, name)
 }
 
 // GetCompanyIdentity returns the content of COMPANY_IDENTITY.md.

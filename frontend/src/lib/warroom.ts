@@ -22,6 +22,9 @@ import {
   SwitchProject as _SwitchProject,
   RenameProject as _RenameProject,
   ArchiveProject as _ArchiveProject,
+  ListOllamaModels as _ListOllamaModels,
+  PullOllamaModel as _PullOllamaModel,
+  DeleteOllamaModel as _DeleteOllamaModel,
 } from '../../bindings/github.com/haepapa/kotui/internal/warroom/warroomservice';
 
 import { Events } from '@wailsio/runtime';
@@ -100,6 +103,18 @@ export function getOrCreateDirectConversation(agentID: string): Promise<string> 
 
 export function sendDirectMessage(agentID: string, message: string): Promise<void> {
   return _SendDirectMessage(agentID, message);
+}
+
+export function listOllamaModels(endpoint: string = ''): Promise<string[]> {
+  return _ListOllamaModels(endpoint) as Promise<string[]>;
+}
+
+export function pullOllamaModel(name: string): Promise<void> {
+  return _PullOllamaModel(name);
+}
+
+export function deleteOllamaModel(name: string): Promise<void> {
+  return _DeleteOllamaModel(name);
 }
 
 // --- Event subscriptions -----------------------------------------------
