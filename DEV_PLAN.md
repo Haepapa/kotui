@@ -25,7 +25,7 @@ Establish the skeleton that every subsequent phase depends on.
 | Wails v3 init | `wails3 init` with Svelte 5 frontend template |
 | Go module structure | `cmd/`, `internal/dispatcher/`, `internal/ollama/`, `internal/mcp/`, `internal/agent/`, `internal/store/`, `pkg/models/` |
 | SQLite bootstrap | Embedded DB via `modernc.org/sqlite` (pure Go). Schema migration system using versioned `.sql` files |
-| Config system | TOML config file in `/data/config.toml` covering Ollama endpoint, active project, timezone, model assignments |
+| Config system | TOML config file in `/data/config.toml` covering local Ollama endpoint, active project, timezone, primary lead model, worker model, and **optional Senior Consultant** (model, endpoint, SSH wake config) |
 | Logging | Structured logging (`slog`) with two tiers: Summary (Group Chat) and Raw (Engine Room) |
 | Test harness | Set up Go test infrastructure (`go test ./...`). **All Trust Kernel phases (0–6) require automated unit tests.** The Dispatcher, MCP Permission Gate, and Sandbox boundary are the "Immutable Laws" — if a future self-built update breaks permission logic, only hard-coded tests will catch it. Minimum coverage targets: Dispatcher message routing, MCP permission gate (all 3 clearance tiers), sandbox escape prevention, VRAM budget/swap logic. |
 
@@ -35,14 +35,16 @@ Establish the skeleton that every subsequent phase depends on.
 
 ## Phase 1 — Ollama Integration & Single-Agent Loop 🔒
 
-The most critical subsystem. If inference doesn't work, nothing works.
+The most critical subsystem. If inference doesn't work, nothing works. Critically, **no assumption is made about model size** — the same code must work whether the configured lead is a 3B model on a Raspberry Pi or a 32B model on a desktop.
 
 | Task | Detail |
 |------|--------|
 | Ollama HTTP client | `/api/chat` (streaming), `/api/tags`, `/api/pull`, `/api/embeddings` |
-| VRAM budget check | On startup, query available VRAM via Ollama `/api/tags` + system inspection. Calculate whether Lead (30B-Q4) + Worker (8B-Q4) fit simultaneously. Store result as the system's **VRAM Profile** (`dual` or `swap`). |
+| VRAM budget check | On startup, query available VRAM via Ollama `/api/tags` + system RAM inspection. Calculate whether Lead model + Worker model fit simultaneously **based on the actual configured model sizes** (not hardcoded assumptions). Store result as the system's **VRAM Profile** (`dual` or `swap`). |
 | VRAM manager | Load/unload via `keep_alive` parameter. **Dual mode:** Lead = `-1` (persistent), Workers = `0` (release after use). **Swap mode:** Before loading a Worker, "Park" the Lead (set `keep_alive: 0`, wait for unload confirmation), load Worker, execute, unload Worker, reload Lead. The Boss should never notice — the swap is transparent. |
-| Heartbeat monitor | Periodic `/api/tags` poll. Detect OOM / hang → emit SystemEmergency event |
+| Multi-endpoint support | The Ollama client must support **multiple named endpoints** — at minimum `local` (Primary Lead + Workers) and `senior` (Senior Consultant). Both can point to the same host or different hosts. |
+| SSH wake support | Optional: before connecting to a remote endpoint, attempt SSH start of `ollama serve` on the configured remote host. Gracefully degrade if SSH is not configured. |
+| Heartbeat monitor | Periodic `/api/tags` poll on each configured endpoint. Detect OOM / hang → emit SystemEmergency event |
 | Single conversation loop | Send user message → stream tokens → accumulate response → return |
 | Error handling | 60s timeout per turn, 3 retries on transient failure, escalation on 3rd failure |
 
@@ -51,11 +53,12 @@ The most critical subsystem. If inference doesn't work, nothing works.
 > - Streaming works smoothly
 > - Model loads/unloads correctly
 > - **VRAM Profile detection is accurate** (test on actual hardware)
-> - **Swap mode works on constrained GPU** (Park Lead → load Worker → unload Worker → reload Lead, no OOM)
+> - **Swap mode works on constrained hardware** (Park Lead → load Worker → unload Worker → reload Lead, no OOM)
+> - **Test with an 8B-only setup** — the system should work fully without any 30B+ model present
 > - Heartbeat detects a manually killed Ollama process
 > - Timeout triggers after 60s of silence
 >
-> **Feedback needed:** Response quality, latency feel, error messages clarity.
+> **Feedback needed:** Response quality, latency feel, error messages clarity. Does the 8B-only workflow feel usable?
 
 ---
 
@@ -132,7 +135,8 @@ Give agents memory, personality, and growth.
 | Identity filesystem | `/data/agents/{agent_id}/identity/` containing `soul.md`, `persona.md`, `skills.md`, `instruction.md` |
 | System prompt composer | Reads identity files + `handbook.md` + `COMPANY_IDENTITY.md` → assembles `instruction.md` |
 | Company Identity loader | Parse and inject Vision, Purpose, Values into every agent's context |
-| `handbook.md` | Write the initial SOP document: journal format, etiquette rules, hard-fail constraints |
+| **Capability tier declaration** | Each agent's `skills.md` includes a `capability_ceiling` field — a brief natural-language description of task types this model handles reliably (e.g. "code generation, summarisation, simple reasoning") and known limits (e.g. "avoid multi-step mathematical proofs, complex multi-file architecture design"). The system prompt instructs the agent to emit a structured `escalation_needed` signal when a task clearly falls outside these limits. |
+| `handbook.md` | Write the initial SOP document: journal format, etiquette rules, hard-fail constraints, and the **escalation protocol** (when and how to signal capability limits). |
 | Agent spawn/teardown | Create agent directory → compose prompt → load model → ready. On teardown: unload model → write journal. |
 | Journaling | On task completion: write `journal/YYYY-MM-DD-HHMM.md` with task summary, outcome, and lessons |
 | Skill proposals | Agent can append to a `proposed_skills.md`. Requires Boss approval to merge into `skills.md`. |
@@ -147,12 +151,14 @@ The hierarchy comes alive.
 
 | Task | Detail |
 |------|--------|
-| Lead Agent init | Spawn with 30B model, `keep_alive: -1`, planning & verification tools |
-| Worker spawning | Lead requests a Specialist → Dispatcher spawns with 8B model → grants scoped tools |
+| Lead Agent init | Spawn with the **configured primary model** (any size), `keep_alive: -1`, planning & verification tools. No hardcoded size assumption. |
+| Worker spawning | Lead requests a Specialist → Dispatcher spawns with configured worker model → grants scoped tools |
 | Verify-then-Proceed | Lead assigns sub-task → Worker executes → posts Draft (hidden from Boss) → Lead reviews → Pass/Fail |
 | Task Tree | SQLite `tasks` table with parent-child relationships. Lead decomposes Boss request into sub-tasks. |
 | Hiring workflow | Lead posts Hiring Proposal → Sandbox spawn with **Trial clearance** (read-only tools) → Boss interview in private chat → Approve/Reject → On approval, promote to Specialist clearance and onboard to Group Chat |
 | VRAM coordination | Respects the **VRAM Profile** from Phase 1. In `dual` mode: Lead + 1 Worker simultaneously. In `swap` mode: Park Lead before each Worker execution, reload after. Queue additional workers either way. |
+| **Capability Escalation Router** | When the Lead emits an `escalation_needed` signal, the Dispatcher: (1) checks if a Senior Consultant is configured; (2) if yes — parks Lead + active Worker, connects to Senior Consultant endpoint (SSH-waking the remote host if configured), routes the sub-task, returns result to Lead, reloads Lead; (3) if no Senior Consultant is configured — notifies the Boss with a structured message explaining what capability is needed, pauses the task. The Lead is **never** allowed to blindly attempt tasks it has flagged as beyond its capability — this prevents confident hallucination. |
+| **Senior Consultant lifecycle** | On-demand spawn only. VRAM strategy: local = park everything first; remote = no local VRAM cost. After task completion: unload local Senior Consultant immediately (`keep_alive: 0`); allow remote to sleep (close connection). Log escalation event in SQLite for Boss review. |
 
 ### 🧪 Test Gate 4 — "The War Room Works"
 > In terminal mode, give the Lead a multi-step task: "Set up a new Go project with a REST API that has a health endpoint, and write tests for it."
@@ -162,8 +168,10 @@ The hierarchy comes alive.
 > - Verify-then-Proceed loop functions (observe a correction cycle if possible)
 > - VRAM stays within bounds (only 1 worker loaded at a time)
 > - Journals are written on completion
+> - **Run with an 8B-only setup** — all functionality should work without a large model
+> - **Trigger a capability escalation** — give the Lead a task it should flag (e.g. complex multi-file architecture design) and verify: (a) it signals rather than attempts, (b) if no Senior Consultant is configured, the Boss receives a clear pause notification; (c) if a Senior Consultant is configured, the escalation route is used and the result returned
 >
-> **Feedback needed:** Quality of task decomposition. Does the Lead → Worker handoff feel right? Are correction cycles productive or loops?
+> **Feedback needed:** Quality of task decomposition. Does the Lead → Worker handoff feel right? Are correction cycles productive or loops? Does the 8B model self-assess accurately, or does it over- or under-escalate?
 
 ---
 
@@ -200,7 +208,7 @@ The desktop experience. Built on top of the now-stable backend.
 | Candidate Trial Window | Temporary chat during Hiring. Restricted scope. Accept/Reject buttons. |
 | Artifact rendering | File links in chat as clickable pills. Code preview for source files. |
 | Boss approval UI | Notification badge for pending approvals (skill promotions, hiring). Approve/Reject inline. |
-| Settings view | "Infrastructure Office" — Ollama endpoint, model assignments, timezone, remote messaging tokens |
+| Settings view | "Infrastructure Office" — local Ollama endpoint, primary lead model, worker model, **Senior Consultant** config (model, remote endpoint, SSH wake settings), timezone, remote messaging tokens |
 | Company Identity editor | In-app markdown editor. Save triggers "Culture Update" broadcast to all active agents. **This must force a full Context Reset** — not just a notification. LLMs are "stubborn" and will continue following their previous system prompt unless it is fully re-injected. On Culture Update: (1) recompose `instruction.md` for every active agent incorporating the new values, (2) terminate the current conversation context for each agent, (3) re-initialize with the updated system prompt and a brief "Culture Update: the following values have changed..." preamble so the agent understands why its context was reset. |
 
 ### 🧪 Test Gate 6 — "Full Loop"
@@ -306,16 +314,16 @@ These tools extend agent capabilities. Each follows the existing MCP tool patter
 ```
 STRICT DEV GUIDANCE (Trust Kernel)
 ├── Phase 0: Scaffolding
-├── Phase 1: Ollama Integration          ← Test Gate 1
+├── Phase 1: Ollama Integration (any model size, multi-endpoint)  ← Test Gate 1
 ├── Phase 2: Dispatcher & Message Bus
 ├── Phase 3: MCP Framework               ← Test Gate 2
 ├── Phase 4: Core MCP Tools              ← Test Gate 3
-├── Phase 5: Agent Identity & Lifecycle
-└── Phase 6: Multi-Agent Orchestration   ← Test Gate 4
+├── Phase 5: Agent Identity & Lifecycle (+ capability tier declaration)
+└── Phase 6: Multi-Agent Orchestration (+ capability escalation router)  ← Test Gate 4
 
 HUMAN DEV, NORMAL GUIDANCE (Verified Core)
 ├── Phase 7: War Room UI Shell           ← Test Gate 5
-├── Phase 8: UI Interaction Layers       ← Test Gate 6
+├── Phase 8: UI Interaction Layers (+ Senior Consultant config UI)  ← Test Gate 6
 └── Phase 9: Agent Memory & Vector Search← Test Gate 7
 
 ═══════════════════════════════════════════
