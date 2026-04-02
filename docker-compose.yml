@@ -1,0 +1,78 @@
+# Kōtui — Docker Compose
+#
+# Usage:
+#   docker compose up -d
+#
+# The orchestrator container runs kotui in headless mode.
+# The ollama container provides the LLM inference API.
+#
+# Data is persisted across restarts via the kotui_data volume.
+# Ollama models are cached in the ollama_data volume.
+#
+# Human review required for security boundaries:
+#   - The orchestrator container runs as a non-root user (kotui).
+#   - The /data volume is the ONLY filesystem the orchestrator writes to.
+#   - The MCP sandbox root is /data/sandbox — agents cannot write outside it.
+#   - The ollama service is only reachable internally (no port exposed to host by default).
+
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kotui_orchestrator
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - kotui_data:/data
+    environment:
+      # Override config path explicitly (also the default inside the container).
+      - KOTUI_CONFIG=/data/config.toml
+      # Set timezone — matches AppConfig default.
+      - TZ=Pacific/Auckland
+    networks:
+      - kotui_net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: kotui_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - kotui_net
+    # Health check: poll the Ollama API until it responds.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # ── GPU support ────────────────────────────────────────────────────────────
+    # Uncomment the block below to enable NVIDIA GPU passthrough.
+    # Requires the NVIDIA Container Toolkit on the host.
+    # See: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+    #
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+networks:
+  kotui_net:
+    driver: bridge
+
+volumes:
+  kotui_data:
+    # To use a host-path bind mount instead, replace with:
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /path/on/host/kotui-data
+  ollama_data:

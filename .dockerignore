@@ -1,0 +1,36 @@
+# .dockerignore — exclude files not needed in the Docker build context.
+
+# Git and CI
+.git
+.gitignore
+.github
+
+# Dev artifacts
+bin/
+*.dev.app/
+
+# Frontend dev files (we only need the built dist, copied from Stage 1)
+frontend/node_modules/
+frontend/.svelte-kit/
+
+# Go build cache
+vendor/
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+
+# Docs and planning files (not needed at runtime)
+*.md
+DEV_PLAN.md
+DEV_QUESTIONS.md
+DEV_ANSWERS_*.md
+GOVERNANCE.md
+UI_UX_SPEC.md
+TECHNICAL_ARCH.md
+LIFECYCLE_WORKFLOW.md
+REMOTE_MESSAGING.md
+RESOURCE_MGMT.md
+AGENT_EVOLUTION.md
+INFRASTRUCTURE_SETTINGS.md
+DOCKER_DEPLOYMENT.md
