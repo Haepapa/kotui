@@ -1,0 +1,122 @@
+// Package models defines shared data types used across all internal packages.
+package models
+
+import "time"
+
+// LogTier controls which event stream a log record is sent to.
+type LogTier string
+
+const (
+	// TierSummary routes to the Group Chat (Boss-visible).
+	TierSummary LogTier = "summary"
+	// TierRaw routes to the Engine Room console (Dev Mode only).
+	TierRaw LogTier = "raw"
+)
+
+// AgentRole defines an agent's clearance and position in the hierarchy.
+type AgentRole string
+
+const (
+	RoleLead       AgentRole = "lead"
+	RoleSpecialist AgentRole = "specialist"
+	RoleTrial      AgentRole = "trial" // sandbox candidates during hiring
+)
+
+// AgentStatus represents the current lifecycle state of an agent.
+type AgentStatus string
+
+const (
+	StatusIdle      AgentStatus = "idle"
+	StatusWorking   AgentStatus = "working"
+	StatusParked    AgentStatus = "parked" // VRAM swap mode: offloaded to system RAM
+	StatusOnboarded AgentStatus = "onboarded"
+	StatusRejected  AgentStatus = "rejected"
+)
+
+// VRAMProfile describes how models must be managed on this hardware.
+type VRAMProfile string
+
+const (
+	// VRAMDual allows Lead + one Worker to be loaded simultaneously.
+	VRAMDual VRAMProfile = "dual"
+	// VRAMSwap requires the Lead to be parked before loading a Worker.
+	VRAMSwap VRAMProfile = "swap"
+)
+
+// MessageKind classifies a message in the conversation stream.
+type MessageKind string
+
+const (
+	KindBossCommand   MessageKind = "boss_command"
+	KindAgentMessage  MessageKind = "agent_message"
+	KindToolCall      MessageKind = "tool_call"
+	KindToolResult    MessageKind = "tool_result"
+	KindMilestone     MessageKind = "milestone"
+	KindSystemEvent   MessageKind = "system_event"
+	KindDraft         MessageKind = "draft" // Lead-internal, not shown to Boss
+)
+
+// Agent holds the metadata for a registered agent.
+type Agent struct {
+	ID        string      `json:"id"`
+	Name      string      `json:"name"`
+	Role      AgentRole   `json:"role"`
+	Status    AgentStatus `json:"status"`
+	Model     string      `json:"model"`
+	ProjectID string      `json:"project_id"`
+	CreatedAt time.Time   `json:"created_at"`
+}
+
+// Project represents an isolated workspace.
+type Project struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	DataPath    string    `json:"data_path"`
+	Active      bool      `json:"active"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Message is a single entry in the conversation ledger.
+type Message struct {
+	ID           string      `json:"id"`
+	ProjectID    string      `json:"project_id"`
+	ConversationID string    `json:"conversation_id"`
+	AgentID      string      `json:"agent_id"`
+	Kind         MessageKind `json:"kind"`
+	Tier         LogTier     `json:"tier"`
+	Content      string      `json:"content"`
+	Metadata     string      `json:"metadata"` // JSON blob for tool call details etc.
+	CreatedAt    time.Time   `json:"created_at"`
+}
+
+// Task is a node in the hierarchical Task Tree.
+type Task struct {
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id"`
+	ParentID    string    `json:"parent_id,omitempty"`
+	AssigneeID  string    `json:"assignee_id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"` // pending, in_progress, draft, verifying, done, failed, escalated
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// Approval records a Boss decision on a pending request.
+type Approval struct {
+	ID          string    `json:"id"`
+	ProjectID   string    `json:"project_id"`
+	Kind        string    `json:"kind"` // hiring, skill_promotion, sudo
+	SubjectID   string    `json:"subject_id"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"` // pending, approved, rejected
+	CreatedAt   time.Time `json:"created_at"`
+	DecidedAt   *time.Time `json:"decided_at,omitempty"`
+}
+
+// SystemEvent is an internal event emitted by the orchestrator engine.
+type SystemEvent struct {
+	Kind    string `json:"kind"`   // heartbeat, oom_detected, culture_update, emergency
+	Payload string `json:"payload"` // JSON blob
+}

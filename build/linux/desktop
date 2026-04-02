@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Kotui
+Comment=AgentFlow Orchestrator — Virtual Company AI
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/kotui %u
+Terminal=false
+Type=Application
+Icon=kotui
+Categories=Utility;
+StartupWMClass=kotui
+
+ 

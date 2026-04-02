@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MsixPackagingToolTemplate
+    xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
+    <Settings
+        AllowTelemetry="false"
+        ApplyACLsToPackageFiles="true"
+        GenerateCommandLineFile="true"
+        AllowPromptForPassword="false">
+    </Settings>
+    <Installer
+        Path="kotui"
+        Arguments=""
+        InstallLocation="C:\Program Files\Haepapa\Kotui">
+    </Installer>
+    <PackageInformation
+        PackageName="Kotui"
+        PackageDisplayName="Kotui"
+        PublisherName="CN=Haepapa"
+        PublisherDisplayName="Haepapa"
+        Version="0.1.0.0"
+        PackageDescription="AgentFlow Orchestrator — Virtual Company AI">
+        <Capabilities>
+            <Capability Name="runFullTrust" />
+            
+        </Capabilities>
+        <Applications>
+            <Application
+                Id="nz.haepapa.kotui"
+                Description="AgentFlow Orchestrator — Virtual Company AI"
+                DisplayName="Kotui"
+                ExecutableName="kotui"
+                EntryPoint="Windows.FullTrustApplication">
+                
+            </Application>
+        </Applications>
+        <Resources>
+            <Resource Language="en-us" />
+        </Resources>
+        <Dependencies>
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+        </Dependencies>
+        <Properties>
+            <Framework>false</Framework>
+            <DisplayName>Kotui</DisplayName>
+            <PublisherDisplayName>Haepapa</PublisherDisplayName>
+            <Description>AgentFlow Orchestrator — Virtual Company AI</Description>
+            <Logo>Assets\AppIcon.png</Logo>
+        </Properties>
+    </PackageInformation>
+    <SaveLocation PackagePath="kotui.msix" />
+    <PackageIntegrity>
+        <CertificatePath></CertificatePath>
+    </PackageIntegrity>
+</MsixPackagingToolTemplate>

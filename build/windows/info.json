@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "Haepapa",
+			"FileDescription": "AgentFlow Orchestrator — Virtual Company AI",
+			"LegalCopyright": "© 2026, My Company",
+			"ProductName": "Kotui",
+			"Comments": "This is a comment"
+		}
+	}
+}
