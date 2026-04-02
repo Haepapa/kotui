@@ -37,3 +37,10 @@ func (a *ClientAdapter) ChatStream(ctx context.Context, req ollama.ChatRequest) 
 func (a *ClientAdapter) IsHealthy(ctx context.Context) bool {
 	return a.c.IsHealthy(ctx)
 }
+
+// Embed forwards to the underlying ollama.Client.
+// This is not part of the Inferrer interface — it exists so that orchestrator.New()
+// can type-assert the adapter to obtain an Embedder for the memory store.
+func (a *ClientAdapter) Embed(ctx context.Context, model, text string) ([]float32, error) {
+	return a.c.Embed(ctx, model, text)
+}

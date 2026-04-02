@@ -24,6 +24,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/haepapa/kotui/internal/config"
 	"github.com/haepapa/kotui/internal/dispatcher"
+	"github.com/haepapa/kotui/internal/memory"
 	"github.com/haepapa/kotui/internal/orchestrator"
 	"github.com/haepapa/kotui/internal/store"
 	"github.com/haepapa/kotui/pkg/models"
@@ -73,6 +74,7 @@ type WarRoomService struct {
 	db   *store.DB
 	orch *orchestrator.Orchestrator
 	disp *dispatcher.Dispatcher
+	mem  *memory.Store
 
 	cfg                 config.Config
 	cfgPath             string
@@ -93,12 +95,14 @@ func New(
 	cfg config.Config,
 	cfgPath string,
 	companyIdentityPath string,
+	mem *memory.Store,
 ) *WarRoomService {
 	s := &WarRoomService{
 		app:                 app,
 		db:                  db,
 		orch:                orch,
 		disp:                disp,
+		mem:                 mem,
 		cfg:                 cfg,
 		cfgPath:             cfgPath,
 		companyIdentityPath: companyIdentityPath,
@@ -487,6 +491,10 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 		_ = s.db.SaveMessage(ctx, msg)
 	}
 	s.app.Event.Emit("kotui:message", msg)
+	// Index as boss feedback for recall.
+	if s.mem != nil {
+		s.mem.IndexAsync(ctx, agentID, p.ID, message, true)
+	}
 	go func() {
 		if err := s.orch.HandleBossCommand(context.Background(), "[DM to "+agentID+"] "+message); err != nil {
 			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})

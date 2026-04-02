@@ -12,6 +12,7 @@ import (
 	"github.com/haepapa/kotui/internal/config"
 	"github.com/haepapa/kotui/internal/dispatcher"
 	"github.com/haepapa/kotui/internal/logging"
+	"github.com/haepapa/kotui/internal/memory"
 	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/internal/orchestrator"
 	"github.com/haepapa/kotui/internal/store"
@@ -59,9 +60,16 @@ func main() {
 
 	ollamaClient := ollama.New(cfg.Ollama.Endpoint)
 
+	// Create memory store (non-fatal if embedder model not configured).
+	var memStore *memory.Store
+	if cfg.Models.Embedder != "" {
+		memStore = memory.New(db, ollamaClient, cfg.Models.Embedder, slog.Default())
+	}
+
 	orchCfg := orchestrator.OrchestratorConfig{
 		LeadModel:           cfg.Models.Lead,
 		WorkerModel:         cfg.Models.Specialist,
+		EmbedderModel:       cfg.Models.Embedder,
 		DataDir:             cfg.App.DataDir,
 		SandboxRoot:         filepath.Join(cfg.App.DataDir, "sandbox"),
 		CompanyIdentityPath: "COMPANY_IDENTITY.md",
@@ -107,7 +115,7 @@ func main() {
 	})
 
 	// --- War Room service (Wails RPC + event bridge) -------------------
-	wrService := warroom.New(app, db, orch, disp, cfg, config.ConfigPath(), "COMPANY_IDENTITY.md")
+	wrService := warroom.New(app, db, orch, disp, cfg, config.ConfigPath(), "COMPANY_IDENTITY.md", memStore)
 	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
 		Name: "WarRoom",
 	}))

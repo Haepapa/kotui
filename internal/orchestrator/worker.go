@@ -9,6 +9,7 @@ import (
 	"github.com/haepapa/kotui/internal/agent"
 	"github.com/haepapa/kotui/internal/dispatcher"
 	"github.com/haepapa/kotui/internal/mcp"
+	"github.com/haepapa/kotui/internal/memory"
 	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/internal/store"
 	"github.com/haepapa/kotui/pkg/models"
@@ -18,10 +19,12 @@ const verifyMaxRetries = 2 // Lead re-queues Worker up to this many times
 
 // WorkerJob carries a task assignment from the Lead to a Worker.
 type WorkerJob struct {
-	TaskID      string
-	Instruction string
-	ProjectID   string
-	ConvID      string
+	TaskID         string
+	Instruction    string
+	ProjectID      string
+	ConvID         string
+	AgentID        string // optional: stable agent identity for memory recall
+	PastExperience string // recalled journal entries from memory.FormatRecall
 }
 
 // WorkerResult is what the Worker returns after completing (or failing) a job.
@@ -50,6 +53,7 @@ func spawnWorker(
 		DataDir:             cfg.DataDir,
 		CompanyIdentityPath: cfg.CompanyIdentityPath,
 		MCPFragment:         mcpEng.SystemPromptFragment(models.ClearanceSpecialist),
+		PastExperience:      job.PastExperience,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("spawn worker: %w", err)
@@ -77,6 +81,7 @@ func runWorkerTask(
 	db *store.DB,
 	disp *dispatcher.Dispatcher,
 	job WorkerJob,
+	mem *memory.Store,
 	log *slog.Logger,
 ) (WorkerResult, error) {
 	// Acquire VRAM slot — parks Lead in swap mode.
@@ -97,6 +102,18 @@ func runWorkerTask(
 		Tier:      models.TierRaw,
 		Content:   fmt.Sprintf("[Worker] starting task %s", job.TaskID),
 	})
+
+	// Recall relevant memories for this worker.
+	if mem != nil && job.ProjectID != "" {
+		agentID := job.AgentID
+		if agentID == "" {
+			agentID = "worker"
+		}
+		entries, recallErr := mem.Recall(ctx, agentID, job.ProjectID, job.Instruction, 3)
+		if recallErr == nil {
+			job.PastExperience = memory.FormatRecall(entries)
+		}
+	}
 
 	var lastOutput string
 	for attempt := 0; attempt <= verifyMaxRetries; attempt++ {
@@ -135,11 +152,20 @@ func runWorkerTask(
 				"Worker output:\n%s", job.Instruction, output)
 
 		verdict, verifyErr := lead.Turn(ctx, verifyInstruction)
-		workerAgent.Teardown(agent.JournalEntry{
+		journalEntry := agent.JournalEntry{
 			Task:    job.Instruction,
 			Outcome: "success",
 			Summary: fmt.Sprintf("Completed on attempt %d. Output: %s", attempt+1, truncate(output, 200)),
-		})
+		}
+		workerAgent.Teardown(journalEntry)
+		if mem != nil {
+			agentID := job.AgentID
+			if agentID == "" {
+				agentID = "worker"
+			}
+			content := journalEntry.Task + "\n" + journalEntry.Summary
+			mem.IndexAsync(ctx, agentID, job.ProjectID, content, false)
+		}
 
 		if verifyErr != nil {
 			log.Warn("lead verification error", "err", verifyErr, "task", job.TaskID)

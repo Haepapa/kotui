@@ -16,7 +16,7 @@ func TestOpenAndMigrate(t *testing.T) {
 	defer db.Close()
 
 	// Verify core tables were created.
-	tables := []string{"projects", "agents", "conversations", "messages", "tasks", "approvals"}
+	tables := []string{"projects", "agents", "conversations", "messages", "tasks", "approvals", "journal_embeddings"}
 	for _, table := range tables {
 		var name string
 		err := db.QueryRow(
@@ -47,7 +47,7 @@ func TestMigrationsIdempotent(t *testing.T) {
 
 	var count int
 	db2.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count)
-	if count != 1 {
-		t.Errorf("expected 1 migration record, got %d", count)
+	if count != 2 {
+		t.Errorf("expected 2 migration records, got %d", count)
 	}
 }

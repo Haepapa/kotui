@@ -13,13 +13,14 @@ var embeddedFiles embed.FS
 // compose assembles the agent's system prompt from:
 //  1. Company Identity (COMPANY_IDENTITY.md) — vision, purpose, values
 //  2. Embedded handbook — SOP, etiquette, hard constraints, escalation protocol
-//  3. Agent soul.md — core values and role
-//  4. Agent persona.md — character and communication style
-//  5. Agent skills.md — capabilities and capability ceiling
-//  6. MCP tool fragment — available tools for this agent's clearance level
+//  3. Past Experience (optional) — recalled journal entries injected after Handbook
+//  4. Agent soul.md — core values and role
+//  5. Agent persona.md — character and communication style
+//  6. Agent skills.md — capabilities and capability ceiling
+//  7. MCP tool fragment — available tools for this agent's clearance level
 //
 // The assembled prompt is written to instruction.md and returned.
-func compose(paths IdentityPaths, companyIdentityPath, mcpFragment string) (string, error) {
+func compose(paths IdentityPaths, companyIdentityPath, mcpFragment, pastExperience string) (string, error) {
 	var sb strings.Builder
 
 	// 1. Company Identity
@@ -36,7 +37,13 @@ func compose(paths IdentityPaths, companyIdentityPath, mcpFragment string) (stri
 	sb.WriteString(string(handbook))
 	sb.WriteString("\n\n---\n\n")
 
-	// 3. Soul
+	// 3. Past Experience (recalled journal entries, if any)
+	if pastExperience != "" {
+		sb.WriteString(pastExperience)
+		sb.WriteString("\n\n---\n\n")
+	}
+
+	// 4. Soul
 	soul, err := readIdentityFile(paths.SoulPath, "soul.md")
 	if err != nil {
 		return "", err
@@ -44,7 +51,7 @@ func compose(paths IdentityPaths, companyIdentityPath, mcpFragment string) (stri
 	sb.WriteString(soul)
 	sb.WriteString("\n\n---\n\n")
 
-	// 4. Persona
+	// 5. Persona
 	persona, err := readIdentityFile(paths.PersonaPath, "persona.md")
 	if err != nil {
 		return "", err
@@ -52,7 +59,7 @@ func compose(paths IdentityPaths, companyIdentityPath, mcpFragment string) (stri
 	sb.WriteString(persona)
 	sb.WriteString("\n\n---\n\n")
 
-	// 5. Skills (includes capability ceiling)
+	// 6. Skills (includes capability ceiling)
 	skills, err := readIdentityFile(paths.SkillsPath, "skills.md")
 	if err != nil {
 		return "", err
@@ -60,7 +67,7 @@ func compose(paths IdentityPaths, companyIdentityPath, mcpFragment string) (stri
 	sb.WriteString(skills)
 	sb.WriteString("\n\n---\n\n")
 
-	// 6. MCP tools
+	// 7. MCP tools
 	if mcpFragment != "" {
 		sb.WriteString(mcpFragment)
 		sb.WriteString("\n\n---\n\n")

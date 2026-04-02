@@ -22,6 +22,7 @@ import (
 	"github.com/haepapa/kotui/internal/config"
 	"github.com/haepapa/kotui/internal/dispatcher"
 	"github.com/haepapa/kotui/internal/mcp"
+	"github.com/haepapa/kotui/internal/memory"
 	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/internal/store"
 	"github.com/haepapa/kotui/internal/tools"
@@ -33,6 +34,7 @@ import (
 type OrchestratorConfig struct {
 	LeadModel           string
 	WorkerModel         string
+	EmbedderModel       string // e.g. "nomic-embed-text"; empty disables memory
 	DataDir             string
 	SandboxRoot         string
 	CompanyIdentityPath string
@@ -57,6 +59,8 @@ type Orchestrator struct {
 	vram      *VRAMCoordinator
 	escalator *EscalationRouter
 	hiring    *HiringManager
+
+	memory *memory.Store // nil if EmbedderModel is empty
 
 	projectID string
 	convID    string
@@ -117,7 +121,7 @@ func New(
 	escalator := newEscalationRouter(cfg.AppConfig, disp, db, log)
 	hiringMgr := newHiringManager(cfg, inferrer, mcpEng, disp, db, log)
 
-	return &Orchestrator{
+	o := &Orchestrator{
 		cfg:       cfg,
 		disp:      disp,
 		db:        db,
@@ -129,7 +133,19 @@ func New(
 		vram:      vram,
 		escalator: escalator,
 		hiring:    hiringMgr,
-	}, nil
+	}
+
+	// Build memory store if embedder model is configured.
+	if cfg.EmbedderModel != "" && db != nil {
+		type embedder interface {
+			Embed(ctx context.Context, model, text string) ([]float32, error)
+		}
+		if emb, ok := inferrer.(embedder); ok {
+			o.memory = memory.New(db, emb, cfg.EmbedderModel, log)
+		}
+	}
+
+	return o, nil
 }
 
 // SetProject sets the active project ID and creates a conversation record.
@@ -161,7 +177,15 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 	o.log.Info("boss command received", "command", truncate(command, 80))
 
 	// Step 1: Lead decomposes the command into sub-tasks.
-	decomposed, err := o.lead.Turn(ctx, decomposePrompt(command))
+	// Augment with relevant memories if available.
+	augmented := decomposePrompt(command)
+	if o.memory != nil && o.projectID != "" {
+		entries, err := o.memory.Recall(ctx, "lead", o.projectID, command, 5)
+		if err == nil && len(entries) > 0 {
+			augmented = memory.FormatRecall(entries) + "\n\n" + augmented
+		}
+	}
+	decomposed, err := o.lead.Turn(ctx, augmented)
 	if err != nil {
 		var escErr *EscalationNeededError
 		if errors.As(err, &escErr) {
@@ -219,7 +243,7 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 
 		result, workerErr := runWorkerTask(
 			ctx, o.cfg, o.inferrer, o.mcpEng,
-			o.lead, o.vram, o.db, o.disp, job, o.log,
+			o.lead, o.vram, o.db, o.disp, job, o.memory, o.log,
 		)
 		if workerErr != nil {
 			var escErr *EscalationNeededError
