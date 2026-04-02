@@ -192,6 +192,7 @@
     overflow: hidden;
     min-width: 0;
     min-height: 0;
+    height: 100%;
   }
 
   /* Messages */
@@ -203,6 +204,7 @@
     flex-direction: column;
     gap: 0.25rem;
     scroll-behavior: smooth;
+    min-height: 0;
   }
   .messages::-webkit-scrollbar { width: 4px; }
   .messages::-webkit-scrollbar-track { background: transparent; }
@@ -366,6 +368,7 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0.25rem 1.375rem;
+    flex-shrink: 0;
   }
   .status-dot {
     width: 7px;
@@ -388,9 +391,10 @@
     color: #475569;
   }
 
-  /* Composer */
+  /* Composer — fixed at bottom, never pushes messages */
   .composer {
     padding: 0 1rem 0.875rem;
+    flex-shrink: 0;
   }
   .send-error {
     font-size: 0.75rem;

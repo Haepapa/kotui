@@ -44,82 +44,85 @@
 </script>
 
 <aside class="sidebar">
-  <!-- Brand + workspace name -->
+  <!-- Brand / workspace -->
   <div class="workspace-header">
     <div class="workspace-logo">K</div>
     <span class="workspace-name">Kōtui</span>
   </div>
 
-  <!-- Channels (projects) -->
-  <nav class="nav-section">
-    <div class="nav-label">Channels</div>
+  <!-- Scrollable body: channels + agents -->
+  <div class="sidebar-scroll">
+    <!-- Channels (projects) -->
+    <nav class="nav-section">
+      <div class="nav-label">Channels</div>
 
-    {#each wr.projects as p (p.id)}
-      <button
-        class="nav-item"
-        class:active={p.id === wr.activeProjectID}
-        onclick={() => handleSwitch(p.id)}
-        title={p.description || p.name}
-      >
-        <span class="nav-hash">#</span>
-        <span class="nav-item-text">{p.name}</span>
-        {#if p.id === wr.activeProjectID}
-          <span class="active-pip"></span>
-        {/if}
-      </button>
-    {/each}
+      {#each wr.projects as p (p.id)}
+        <button
+          class="nav-item"
+          class:active={p.id === wr.activeProjectID}
+          onclick={() => handleSwitch(p.id)}
+          title={p.description || p.name}
+        >
+          <span class="nav-hash">#</span>
+          <span class="nav-item-text">{p.name}</span>
+          {#if p.id === wr.activeProjectID}
+            <span class="active-pip"></span>
+          {/if}
+        </button>
+      {/each}
 
-    {#if showNewProject}
-      <div class="new-project-form">
-        <input
-          class="form-input"
-          placeholder="Channel name"
-          bind:value={newName}
-          bind:this={nameInput}
-          onkeydown={(e) => { if (e.key === 'Enter') handleCreateProject(); if (e.key === 'Escape') showNewProject = false; }}
-        />
-        <input
-          class="form-input"
-          placeholder="Description (optional)"
-          bind:value={newDesc}
-          onkeydown={(e) => { if (e.key === 'Enter') handleCreateProject(); if (e.key === 'Escape') showNewProject = false; }}
-        />
-        <div class="form-actions">
-          <button class="btn-sm primary" onclick={handleCreateProject}>Create</button>
-          <button class="btn-sm" onclick={() => (showNewProject = false)}>Cancel</button>
+      {#if showNewProject}
+        <div class="new-project-form">
+          <input
+            class="form-input"
+            placeholder="Channel name"
+            bind:value={newName}
+            bind:this={nameInput}
+            onkeydown={(e) => { if (e.key === 'Enter') handleCreateProject(); if (e.key === 'Escape') showNewProject = false; }}
+          />
+          <input
+            class="form-input"
+            placeholder="Description (optional)"
+            bind:value={newDesc}
+            onkeydown={(e) => { if (e.key === 'Enter') handleCreateProject(); if (e.key === 'Escape') showNewProject = false; }}
+          />
+          <div class="form-actions">
+            <button class="btn-sm primary" onclick={handleCreateProject}>Create</button>
+            <button class="btn-sm" onclick={() => (showNewProject = false)}>Cancel</button>
+          </div>
         </div>
-      </div>
-    {:else}
-      <button class="nav-item add-item" onclick={() => (showNewProject = true)}>
-        <span class="add-icon">+</span>
-        <span class="nav-item-text">Add channel</span>
-      </button>
-    {/if}
-  </nav>
+      {:else}
+        <button class="nav-item add-item" onclick={() => (showNewProject = true)}>
+          <span class="add-icon">+</span>
+          <span class="nav-item-text">Add channel</span>
+        </button>
+      {/if}
+    </nav>
 
-  <!-- Agents (direct messages) -->
-  <nav class="nav-section" style="margin-top: auto;">
-    <div class="nav-label">Agents</div>
-    {#each wr.agents as agent (agent.id)}
-      <div class="agent-item">
-        <div class="agent-avatar" title="{agent.role}">
-          {initials(agent.name)}
-          <span
-            class="agent-status-dot"
-            style="background:{statusColour[agent.status] ?? '#475569'}"
-            title={agent.status}
-          ></span>
+    <!-- Agents -->
+    <nav class="nav-section">
+      <div class="nav-label">Agents</div>
+      {#each wr.agents as agent (agent.id)}
+        <div class="agent-item">
+          <div class="agent-avatar" title="{agent.role}">
+            {initials(agent.name)}
+            <span
+              class="agent-status-dot"
+              style="background:{statusColour[agent.status] ?? '#475569'}"
+              title={agent.status}
+            ></span>
+          </div>
+          <div class="agent-text">
+            <div class="agent-name">{agent.name}</div>
+            <div class="agent-model">{agent.model || agent.role}</div>
+          </div>
         </div>
-        <div class="agent-text">
-          <div class="agent-name">{agent.name}</div>
-          <div class="agent-model">{agent.model || agent.role}</div>
-        </div>
-      </div>
-    {/each}
-    {#if wr.agents.length === 0}
-      <div class="nav-empty">No agents active</div>
-    {/if}
-  </nav>
+      {/each}
+      {#if wr.agents.length === 0}
+        <div class="nav-empty">No agents active</div>
+      {/if}
+    </nav>
+  </div>
 </aside>
 
 <style>
@@ -130,12 +133,12 @@
     border-right: 1px solid #2a2d35;
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
-    overflow-x: hidden;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  /* Workspace header */
+  /* Workspace header — fixed, never scrolls */
   .workspace-header {
     display: flex;
     align-items: center;
@@ -166,13 +169,23 @@
     text-overflow: ellipsis;
   }
 
+  /* Scrollable content area */
+  .sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+  }
+  .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+  .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: #2a2d35; border-radius: 4px; }
+
   /* Nav sections */
   .nav-section {
     padding: 0.75rem 0 0.5rem;
     display: flex;
     flex-direction: column;
-  }
-  .nav-label {
+  }  .nav-label {
     font-size: 0.6875rem;
     font-weight: 600;
     letter-spacing: 0.07em;

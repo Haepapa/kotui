@@ -100,7 +100,11 @@
     gap: 0.25rem;
     /* macOS traffic lights sit over this area */
     padding-top: 44px;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
+  .rail::-webkit-scrollbar { display: none; }
   .rail-logo {
     width: 36px;
     height: 36px;
@@ -138,6 +142,7 @@
     flex-direction: column;
     overflow: hidden;
     min-width: 0;
+    min-height: 0;
     background: #1a1d23;
   }
   .channel-header {
@@ -149,7 +154,6 @@
     border-bottom: 1px solid #2a2d35;
     gap: 0.75rem;
     background: #1a1d23;
-    /* padding-left accounts for macOS traffic lights which sit over the rail */
   }
   .channel-title {
     display: flex;
@@ -202,8 +206,7 @@
     display: flex;
     overflow: hidden;
     min-height: 0;
-  }
-</style>
+  }</style>
 
 
 
