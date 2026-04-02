@@ -114,3 +114,20 @@ func scanMessages(rows *sql.Rows) ([]models.Message, error) {
 	}
 	return out, rows.Err()
 }
+
+// GetLatestConversation returns the ID of the most recent conversation for a
+// project. Returns ("", nil) if none exists.
+func (db *DB) GetLatestConversation(ctx context.Context, projectID string) (string, error) {
+	var id string
+	err := db.QueryRowContext(ctx,
+		`SELECT id FROM conversations WHERE project_id = ? ORDER BY created_at DESC LIMIT 1`,
+		projectID,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: get latest conversation: %w", err)
+	}
+	return id, nil
+}

@@ -1,15 +1,21 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/haepapa/kotui/internal/config"
+	"github.com/haepapa/kotui/internal/dispatcher"
 	"github.com/haepapa/kotui/internal/logging"
+	"github.com/haepapa/kotui/internal/ollama"
+	"github.com/haepapa/kotui/internal/orchestrator"
 	"github.com/haepapa/kotui/internal/store"
+	"github.com/haepapa/kotui/internal/warroom"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -48,6 +54,32 @@ func main() {
 		select {} // block until signal
 	}
 
+	// --- Backend wiring -----------------------------------------------
+	disp := dispatcher.New()
+
+	ollamaClient := ollama.New(cfg.Ollama.Endpoint)
+
+	orchCfg := orchestrator.OrchestratorConfig{
+		LeadModel:           cfg.Models.Lead,
+		WorkerModel:         cfg.Models.Specialist,
+		DataDir:             cfg.App.DataDir,
+		SandboxRoot:         filepath.Join(cfg.App.DataDir, "sandbox"),
+		CompanyIdentityPath: "COMPANY_IDENTITY.md",
+		AppConfig:           cfg,
+	}
+	orch, orchErr := orchestrator.New(orchCfg, orchestrator.NewClientAdapter(ollamaClient), disp, db, slog.Default())
+	if orchErr != nil {
+		logging.Console.Warn("orchestrator init failed — running without AI backend", "err", orchErr)
+		orch = nil
+	}
+
+	// Activate the last-used project (if any).
+	if cfg.Project.ActiveProjectID != "" && orch != nil {
+		if err := orch.SetProject(context.Background(), cfg.Project.ActiveProjectID); err != nil {
+			logging.Console.Warn("could not restore active project", "err", err)
+		}
+	}
+
 	app := application.New(application.Options{
 		Name:        "Kotui",
 		Description: "AgentFlow Orchestrator — Virtual Company AI",
@@ -73,6 +105,13 @@ func main() {
 		MinWidth:         1024,
 		MinHeight:        640,
 	})
+
+	// --- War Room service (Wails RPC + event bridge) -------------------
+	wrService := warroom.New(app, db, orch, disp)
+	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
+		Name: "WarRoom",
+	}))
+	app.OnShutdown(wrService.Shutdown)
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
