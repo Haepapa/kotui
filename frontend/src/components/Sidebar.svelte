@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createProject, switchProject, decideApproval } from '../lib/warroom';
+  import { createProject, switchProject, getActiveConversation, getMessages } from '../lib/warroom';
   import { wr, openDM, refreshApprovals } from '../stores/warroom.svelte';
   import ApprovalCard from './ApprovalCard.svelte';
 
@@ -36,7 +36,17 @@
   async function handleSwitch(id: string) {
     if (id === wr.activeProjectID) return;
     await switchProject(id);
-    wr.messages.length = 0;
+    wr.activeProjectID = id;
+    wr.activeView = 'chat';
+    wr.messages = [];
+    try {
+      wr.activeConvID = (await getActiveConversation()) ?? '';
+      if (wr.activeConvID) {
+        wr.messages = (await getMessages(wr.activeConvID, 200)) ?? [];
+      }
+    } catch (e) {
+      console.error('handleSwitch load messages:', e);
+    }
   }
 
   function initials(name: string) {
@@ -103,20 +113,25 @@
         {/if}
       </div>
       {#each wr.agents as agent (agent.id)}
-        <div class="agent-item">
-          <button class="agent-avatar" title="{agent.role}" onclick={() => openDM(agent.id)}>
+        <button
+          class="agent-item"
+          class:dm-active={wr.activeView === 'dm' && wr.activeDMAgentID === agent.id}
+          onclick={() => openDM(agent.id)}
+          title="Open direct message with {agent.name}"
+        >
+          <div class="agent-avatar">
             {initials(agent.name)}
             <span
               class="agent-status-dot"
               style="background:{statusColour[agent.status] ?? '#475569'}"
               title={agent.status}
             ></span>
-          </button>
+          </div>
           <div class="agent-text">
             <div class="agent-name">{agent.name}</div>
             <div class="agent-model">{agent.model || agent.role}</div>
           </div>
-        </div>
+        </button>
       {/each}
       {#if wr.agents.length === 0}
         <div class="nav-empty">No agents active</div>
@@ -257,7 +272,17 @@
     gap: 0.625rem;
     padding: 0.35rem 1rem;
     min-height: 36px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: inherit;
+    transition: background 0.1s;
+    border-radius: 0;
   }
+  .agent-item:hover { background: var(--bg-hover); }
+  .agent-item.dm-active { background: var(--bg-active); }
   .agent-avatar {
     width: 26px;
     height: 26px;
@@ -271,11 +296,7 @@
     color: var(--agent-avatar-text);
     flex-shrink: 0;
     position: relative;
-    border: none;
-    cursor: pointer;
-    transition: opacity 0.12s;
   }
-  .agent-avatar:hover { opacity: 0.8; }
   .approval-badge {
     display: inline-flex;
     align-items: center;

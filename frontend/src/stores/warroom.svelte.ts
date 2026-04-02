@@ -138,14 +138,22 @@ export function switchToIdentity() {
 }
 
 export async function openDM(agentID: string) {
+  if (!wr.activeProjectID) {
+    wr.errorBanner = 'Select a channel before opening a direct message.';
+    setTimeout(() => (wr.errorBanner = ''), 5000);
+    return;
+  }
   try {
     const convID = await getOrCreateDirectConversation(agentID);
+    if (!convID) throw new Error('No conversation ID returned');
     wr.activeDMAgentID = agentID;
     wr.activeDMConvID = convID;
     wr.dmMessages = (await getMessages(convID, 200)) ?? [];
     wr.activeView = 'dm';
   } catch (e) {
     console.error('openDM:', e);
+    wr.errorBanner = `Could not open DM: ${e instanceof Error ? e.message : String(e)}`;
+    setTimeout(() => (wr.errorBanner = ''), 6000);
   }
 }
 
