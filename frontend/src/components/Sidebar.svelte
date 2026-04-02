@@ -100,7 +100,7 @@
         ></div>
       </div>
     {/each}
-    {#if agents.length === 0}
+    {#if wr.agents.length === 0}
       <div class="empty-agents">No agents spawned</div>
     {/if}
   </div>
