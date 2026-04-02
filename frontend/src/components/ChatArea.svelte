@@ -87,7 +87,7 @@
     {#if messages.length === 0}
       <div class="empty">
         <div class="empty-icon">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
         <p class="empty-title">No messages yet</p>
         <p class="empty-sub">Type a message below to get started.</p>
@@ -266,13 +266,13 @@
     border-color: var(--bubble-tool-border);
   }
   .bubble-text {
-    font-size: 0.9375rem;
+    font-size: 1rem;
     line-height: 1.55;
     white-space: pre-wrap;
     margin: 0;
   }
   .bubble-time {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     opacity: 0.55;
     white-space: nowrap;
     flex-shrink: 0;
@@ -280,14 +280,14 @@
 
   /* Agent avatar */
   .avatar {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 8px;
     background: linear-gradient(145deg, #2d55c8, #5b4de8);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 700;
     color: #fff;
     flex-shrink: 0;
@@ -306,12 +306,12 @@
     padding-left: 0.125rem;
   }
   .bubble-sender {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--text-secondary);
   }
   .kind-chip {
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     background: var(--bg-surface);
     color: var(--text-muted);
     border-radius: 3px;
@@ -325,7 +325,7 @@
     margin: 0.5rem 0;
   }
   .milestone-text {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     color: var(--milestone-color);
     background: var(--milestone-bg);
     border: 1px solid var(--milestone-border);
@@ -337,7 +337,7 @@
     margin: 0.25rem 0;
   }
   .system-event-text {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     color: var(--text-muted);
   }
 
@@ -387,7 +387,7 @@
     50% { opacity: 0.4; }
   }
   .status-label {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
   }
 
@@ -443,7 +443,7 @@
   .send-btn:hover:not(:disabled) { background: var(--accent-btn-hover); }
   .send-btn:disabled { opacity: 0.25; cursor: default; }
   .composer-hint {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     color: var(--composer-hint);
     text-align: right;
     margin-top: 0.3rem;

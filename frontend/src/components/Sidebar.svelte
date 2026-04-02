@@ -152,7 +152,7 @@
     flex-direction: column;
   }
   .nav-label {
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.09em;
     color: var(--nav-label-color);
@@ -163,17 +163,17 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.3rem 1rem;
+    padding: 0.35rem 1rem;
     border: none;
     background: none;
     cursor: pointer;
     width: 100%;
     text-align: left;
     color: var(--nav-item-color);
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
     transition: background 0.1s, color 0.1s;
     position: relative;
-    min-height: 30px;
+    min-height: 32px;
   }
   .nav-item:hover { background: var(--bg-hover); color: var(--nav-item-hover); }
   .nav-item.active { background: var(--bg-active); color: var(--nav-active-color); font-weight: 500; }
@@ -239,18 +239,18 @@
     display: flex;
     align-items: center;
     gap: 0.625rem;
-    padding: 0.3rem 1rem;
-    min-height: 34px;
+    padding: 0.35rem 1rem;
+    min-height: 36px;
   }
   .agent-avatar {
-    width: 22px;
-    height: 22px;
-    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
     background: var(--agent-avatar-bg);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.5625rem;
+    font-size: 0.625rem;
     font-weight: 700;
     color: var(--agent-avatar-text);
     flex-shrink: 0;
@@ -266,6 +266,6 @@
     border: 2px solid var(--bg-sidebar);
   }
   .agent-text { flex: 1; overflow: hidden; }
-  .agent-name { font-size: 0.8125rem; color: var(--agent-name-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .agent-model { font-size: 0.6875rem; color: var(--agent-model-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-name { font-size: 0.875rem; color: var(--agent-name-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agent-model { font-size: 0.75rem; color: var(--agent-model-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

@@ -72,9 +72,9 @@
     border-bottom: 1px solid var(--border-console);
     flex-shrink: 0;
   }
-  .er-title { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.04em; }
+  .er-title { font-size: 0.8125rem; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.04em; }
   .er-count {
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     background: var(--border-console);
     color: var(--text-secondary);
     border-radius: 10px;
@@ -93,7 +93,7 @@
   .log-line {
     display: flex;
     gap: 0.375rem;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     line-height: 1.5;
     align-items: baseline;
     flex-wrap: wrap;
@@ -102,6 +102,6 @@
   .log-kind { font-weight: 600; white-space: nowrap; }
   .log-agent { color: #60a5fa; white-space: nowrap; }
   .log-content { color: var(--text-secondary); word-break: break-word; flex: 1; min-width: 0; }
-  .er-empty { font-size: 0.6875rem; color: var(--text-muted); padding: 1rem; text-align: center; }
+  .er-empty { font-size: 0.75rem; color: var(--text-muted); padding: 1rem; text-align: center; }
 </style>
 
