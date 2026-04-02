@@ -47,7 +47,7 @@ func TestMigrationsIdempotent(t *testing.T) {
 
 	var count int
 	db2.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&count)
-	if count != 2 {
-		t.Errorf("expected 2 migration records, got %d", count)
+	if count != 3 {
+		t.Errorf("expected 3 migration records, got %d", count)
 	}
 }

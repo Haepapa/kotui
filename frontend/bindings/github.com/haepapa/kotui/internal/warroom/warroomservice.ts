@@ -20,6 +20,14 @@ import * as models$0 from "../../pkg/models/models.js";
 import * as $models from "./models.js";
 
 /**
+ * ArchiveProject hides a project from the sidebar. If the project is active,
+ * the next project becomes active; if none remain, the UI shows an empty state.
+ */
+export function ArchiveProject(id: string): $CancellablePromise<void> {
+    return $Call.ByID(3600507192, id);
+}
+
+/**
  * CreateProject creates a new project, marks it active, and switches to it.
  */
 export function CreateProject(name: string, description: string): $CancellablePromise<models$0.Project | null> {
@@ -110,6 +118,13 @@ export function GetProjects(): $CancellablePromise<models$0.Project[]> {
     return $Call.ByID(634004591).then(($result: any) => {
         return $$createType10($result);
     });
+}
+
+/**
+ * RenameProject updates the name and description of an existing project.
+ */
+export function RenameProject(id: string, name: string, description: string): $CancellablePromise<void> {
+    return $Call.ByID(1347916226, id, name, description);
 }
 
 /**

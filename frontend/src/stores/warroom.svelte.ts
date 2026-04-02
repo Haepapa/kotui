@@ -16,7 +16,10 @@ import {
   onApproval,
   getPendingApprovals,
   getOrCreateDirectConversation,
+  renameProject,
+  archiveProject,
 } from '../lib/warroom';
+import { Events } from '@wailsio/runtime';
 import type { AgentInfo, AppView, Approval, HeartbeatState, KotuiMessage, Project, ViewMode } from '../lib/types';
 
 // --- Reactive state object ---
@@ -63,6 +66,7 @@ let unsubMessage: (() => void) | null = null;
 let unsubHeartbeat: (() => void) | null = null;
 let unsubError: (() => void) | null = null;
 let unsubApproval: (() => void) | null = null;
+let unsubProjects: (() => void) | null = null;
 
 export async function initWarRoom() {
   unsubMessage = onMessage((msg) => {
@@ -87,6 +91,16 @@ export async function initWarRoom() {
 
   unsubApproval = onApproval((approvals) => {
     wr.approvals = approvals ?? [];
+  });
+
+  // Refresh project list whenever the backend signals a change.
+  unsubProjects = Events.On('kotui:projects', (event: any) => {
+    const projects: Project[] = event?.data?.[0] ?? [];
+    wr.projects = projects;
+    const active = projects.find((p) => p.active);
+    if (active && active.id !== wr.activeProjectID) {
+      wr.activeProjectID = active.id;
+    }
   });
 
   try {
@@ -119,6 +133,7 @@ export function destroyWarRoom() {
   unsubHeartbeat?.();
   unsubError?.();
   unsubApproval?.();
+  unsubProjects?.();
 }
 
 export function toggleMode() {
@@ -166,3 +181,11 @@ export async function refreshApprovals() {
   }
 }
 
+
+export async function renameChannel(id: string, name: string, description: string): Promise<void> {
+  await renameProject(id, name, description);
+}
+
+export async function archiveChannel(id: string): Promise<void> {
+  await archiveProject(id);
+}

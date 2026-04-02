@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createProject, switchProject, getActiveConversation, getMessages } from '../lib/warroom';
-  import { wr, openDM, refreshApprovals } from '../stores/warroom.svelte';
+  import { wr, openDM, refreshApprovals, renameChannel, archiveChannel } from '../stores/warroom.svelte';
   import ApprovalCard from './ApprovalCard.svelte';
 
   let showNewProject = $state(false);
@@ -8,8 +8,21 @@
   let newDesc = $state('');
   let nameInput = $state<HTMLInputElement | null>(null);
 
+  // Per-channel rename state
+  let renamingID = $state('');
+  let renameNameVal = $state('');
+  let renameDescVal = $state('');
+  let renameInput = $state<HTMLInputElement | null>(null);
+
+  // Which channel has its context menu open
+  let menuOpenID = $state('');
+
   $effect(() => {
     if (showNewProject && nameInput) nameInput.focus();
+  });
+
+  $effect(() => {
+    if (renamingID && renameInput) renameInput.focus();
   });
 
   const statusColour: Record<string, string> = {
@@ -28,6 +41,7 @@
       showNewProject = false;
       newName = '';
       newDesc = '';
+      // The kotui:projects event from the backend will refresh wr.projects automatically.
     } catch (e) {
       console.error('createProject:', e);
     }
@@ -49,6 +63,34 @@
     }
   }
 
+  function startRename(p: { id: string; name: string; description: string }) {
+    menuOpenID = '';
+    renamingID = p.id;
+    renameNameVal = p.name;
+    renameDescVal = p.description ?? '';
+  }
+
+  async function commitRename() {
+    if (!renameNameVal.trim()) return;
+    try {
+      await renameChannel(renamingID, renameNameVal.trim(), renameDescVal.trim());
+    } catch (e) {
+      console.error('renameChannel:', e);
+    } finally {
+      renamingID = '';
+    }
+  }
+
+  async function handleArchive(id: string) {
+    menuOpenID = '';
+    if (!confirm('Archive this channel? It will be hidden from the sidebar.')) return;
+    try {
+      await archiveChannel(id);
+    } catch (e) {
+      console.error('archiveChannel:', e);
+    }
+  }
+
   function initials(name: string) {
     return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   }
@@ -62,18 +104,62 @@
       <div class="nav-label">Channels</div>
 
       {#each wr.projects as p (p.id)}
-        <button
-          class="nav-item"
-          class:active={p.id === wr.activeProjectID}
-          onclick={() => handleSwitch(p.id)}
-          title={p.description || p.name}
-        >
-          <span class="nav-hash">#</span>
-          <span class="nav-item-text">{p.name}</span>
-          {#if p.id === wr.activeProjectID}
-            <span class="active-pip"></span>
-          {/if}
-        </button>
+        {#if renamingID === p.id}
+          <!-- Inline rename form -->
+          <div class="new-project-form">
+            <input
+              class="form-input"
+              placeholder="Channel name"
+              bind:value={renameNameVal}
+              bind:this={renameInput}
+              onkeydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') renamingID = ''; }}
+            />
+            <input
+              class="form-input"
+              placeholder="Description (optional)"
+              bind:value={renameDescVal}
+              onkeydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') renamingID = ''; }}
+            />
+            <div class="form-actions">
+              <button class="btn-sm primary" onclick={commitRename}>Save</button>
+              <button class="btn-sm" onclick={() => (renamingID = '')}>Cancel</button>
+            </div>
+          </div>
+        {:else}
+          <div class="nav-item-wrap" class:active={p.id === wr.activeProjectID}>
+            <button
+              class="nav-item"
+              class:active={p.id === wr.activeProjectID}
+              onclick={() => handleSwitch(p.id)}
+              title={p.description || p.name}
+            >
+              {#if p.id === wr.activeProjectID}
+                <span class="active-pip"></span>
+              {/if}
+              <span class="nav-hash">#</span>
+              <span class="nav-item-text">{p.name}</span>
+            </button>
+            <!-- Channel context menu trigger -->
+            <div class="channel-menu-wrap">
+              <button
+                class="channel-menu-btn"
+                title="Channel options"
+                onclick={(e) => { e.stopPropagation(); menuOpenID = menuOpenID === p.id ? '' : p.id; }}
+                aria-label="Channel options"
+              >⋯</button>
+              {#if menuOpenID === p.id}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="channel-dropdown"
+                  onmouseleave={() => (menuOpenID = '')}
+                >
+                  <button class="dropdown-item" onclick={() => startRename(p)}>Rename</button>
+                  <button class="dropdown-item danger" onclick={() => handleArchive(p.id)}>Archive</button>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
       {/each}
 
       {#if showNewProject}
@@ -190,15 +276,24 @@
     padding: 0 1rem 0.375rem;
     text-transform: uppercase;
   }
+
+  /* Wrapper for channel row + kebab */
+  .nav-item-wrap {
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+  .nav-item-wrap:hover .channel-menu-btn { opacity: 1; }
+
   .nav-item {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.35rem 1rem;
+    padding: 0.35rem 0.5rem 0.35rem 1rem;
     border: none;
     background: none;
     cursor: pointer;
-    width: 100%;
+    flex: 1;
     text-align: left;
     color: var(--nav-item-color);
     font-size: 0.9375rem;
@@ -225,6 +320,53 @@
   .add-item:hover { color: var(--nav-item-color); }
   .add-icon { font-size: 1rem; line-height: 1; flex-shrink: 0; }
   .nav-empty { font-size: 0.8125rem; color: var(--text-muted); padding: 0.375rem 1rem; }
+
+  /* Channel context menu */
+  .channel-menu-wrap {
+    position: relative;
+    flex-shrink: 0;
+    padding-right: 0.375rem;
+  }
+  .channel-menu-btn {
+    opacity: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 5px;
+    transition: opacity 0.1s, background 0.1s, color 0.1s;
+  }
+  .channel-menu-btn:hover { background: var(--bg-hover); color: var(--text-primary); opacity: 1; }
+  .channel-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 100;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    min-width: 130px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .dropdown-item {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.875rem;
+    text-align: left;
+    transition: background 0.1s;
+  }
+  .dropdown-item:hover { background: var(--bg-hover); }
+  .dropdown-item.danger { color: #f87171; }
+  .dropdown-item.danger:hover { background: rgba(248,113,113,0.1); }
 
   /* New project form */
   .new-project-form {

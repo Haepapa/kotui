@@ -276,3 +276,58 @@ func TestStorePersisterRoundTrip(t *testing.T) {
 		t.Errorf("expected 1 persisted message, got %d", count)
 	}
 }
+
+// --- RenameProject & ArchiveProject ---------------------------------------
+
+func TestRenameProject(t *testing.T) {
+db := openTestDB(t)
+ctx := context.Background()
+
+db.CreateProject(ctx, models.Project{ID: "r1", Name: "Original", DataPath: "/tmp", Active: true})
+
+if err := db.RenameProject(ctx, "r1", "Renamed", "new desc"); err != nil {
+t.Fatalf("RenameProject: %v", err)
+}
+p, err := db.GetProject(ctx, "r1")
+if err != nil {
+t.Fatalf("GetProject: %v", err)
+}
+if p.Name != "Renamed" {
+t.Errorf("expected name 'Renamed', got %q", p.Name)
+}
+}
+
+func TestRenameProjectEmptyName(t *testing.T) {
+db := openTestDB(t)
+ctx := context.Background()
+
+db.CreateProject(ctx, models.Project{ID: "r2", Name: "Keep", DataPath: "/tmp", Active: true})
+if err := db.RenameProject(ctx, "r2", "", ""); err == nil {
+t.Fatal("expected error for empty name, got nil")
+}
+}
+
+func TestArchiveProject(t *testing.T) {
+db := openTestDB(t)
+ctx := context.Background()
+
+db.CreateProject(ctx, models.Project{ID: "a1", Name: "A1", DataPath: "/tmp", Active: true})
+db.CreateProject(ctx, models.Project{ID: "a2", Name: "A2", DataPath: "/tmp", Active: false})
+
+if err := db.ArchiveProject(ctx, "a1"); err != nil {
+t.Fatalf("ArchiveProject: %v", err)
+}
+
+projects, err := db.ListProjects(ctx)
+if err != nil {
+t.Fatalf("ListProjects: %v", err)
+}
+for _, p := range projects {
+if p.ID == "a1" {
+t.Errorf("archived project a1 should not appear in ListProjects")
+}
+}
+if len(projects) != 1 || projects[0].ID != "a2" {
+t.Errorf("expected only a2 in list, got %v", projects)
+}
+}

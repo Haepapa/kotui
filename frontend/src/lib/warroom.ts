@@ -20,6 +20,8 @@ import {
   SendBossCommand as _SendBossCommand,
   SendDirectMessage as _SendDirectMessage,
   SwitchProject as _SwitchProject,
+  RenameProject as _RenameProject,
+  ArchiveProject as _ArchiveProject,
 } from '../../bindings/github.com/haepapa/kotui/internal/warroom/warroomservice';
 
 import { Events } from '@wailsio/runtime';
@@ -37,6 +39,14 @@ export function createProject(name: string, description: string): Promise<Projec
 
 export function switchProject(id: string): Promise<void> {
   return _SwitchProject(id);
+}
+
+export function renameProject(id: string, name: string, description: string): Promise<void> {
+  return _RenameProject(id, name, description);
+}
+
+export function archiveProject(id: string): Promise<void> {
+  return _ArchiveProject(id);
 }
 
 export function getActiveConversation(): Promise<string> {

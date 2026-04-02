@@ -114,10 +114,32 @@ export class UIConfig {
     "senior_ssh_host": string;
     "senior_ssh_cmd": string;
     "timezone": string;
+
+    /**
+     * Telegram
+     */
     "telegram_bot_token": string;
+    "telegram_chat_id": string;
+
+    /**
+     * Slack
+     */
     "slack_bot_token": string;
     "slack_channel_id": string;
+    "slack_signing_secret": string;
+
+    /**
+     * WhatsApp
+     */
+    "whatsapp_token": string;
+    "whatsapp_phone_number_id": string;
+    "whatsapp_verify_token": string;
+
+    /**
+     * Shared
+     */
     "webhook_secret": string;
+    "webhook_port": number;
 
     /** Creates a new UIConfig instance. */
     constructor($$source: Partial<UIConfig> = {}) {
@@ -151,14 +173,32 @@ export class UIConfig {
         if (!("telegram_bot_token" in $$source)) {
             this["telegram_bot_token"] = "";
         }
+        if (!("telegram_chat_id" in $$source)) {
+            this["telegram_chat_id"] = "";
+        }
         if (!("slack_bot_token" in $$source)) {
             this["slack_bot_token"] = "";
         }
         if (!("slack_channel_id" in $$source)) {
             this["slack_channel_id"] = "";
         }
+        if (!("slack_signing_secret" in $$source)) {
+            this["slack_signing_secret"] = "";
+        }
+        if (!("whatsapp_token" in $$source)) {
+            this["whatsapp_token"] = "";
+        }
+        if (!("whatsapp_phone_number_id" in $$source)) {
+            this["whatsapp_phone_number_id"] = "";
+        }
+        if (!("whatsapp_verify_token" in $$source)) {
+            this["whatsapp_verify_token"] = "";
+        }
         if (!("webhook_secret" in $$source)) {
             this["webhook_secret"] = "";
+        }
+        if (!("webhook_port" in $$source)) {
+            this["webhook_port"] = 0;
         }
 
         Object.assign(this, $$source);

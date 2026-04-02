@@ -62,15 +62,48 @@ func (db *DB) GetProject(ctx context.Context, id string) (*models.Project, error
 	return scanProject(row)
 }
 
-// ListProjects returns all projects ordered by creation time.
+// ListProjects returns all non-archived projects ordered by creation time.
 func (db *DB) ListProjects(ctx context.Context) ([]models.Project, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, name, description, data_path, active, created_at FROM projects ORDER BY created_at`)
+		`SELECT id, name, description, data_path, active, created_at FROM projects WHERE archived = 0 ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	return scanProjects(rows)
+}
+
+// RenameProject updates the name and description of a project.
+func (db *DB) RenameProject(ctx context.Context, id, name, description string) error {
+	if name == "" {
+		return fmt.Errorf("store: project name must not be empty")
+	}
+	res, err := db.ExecContext(ctx,
+		`UPDATE projects SET name = ?, description = ? WHERE id = ? AND archived = 0`,
+		name, description, id)
+	if err != nil {
+		return fmt.Errorf("store: rename project: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("store: project %q not found", id)
+	}
+	return nil
+}
+
+// ArchiveProject marks a project as archived so it no longer appears in the sidebar.
+// If the project is currently active, active is cleared first.
+func (db *DB) ArchiveProject(ctx context.Context, id string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Clear active flag for this project.
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET active = 0, archived = 1 WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("store: archive project: %w", err)
+	}
+	return tx.Commit()
 }
 
 // SetActiveProject marks the given project as active and all others as inactive.

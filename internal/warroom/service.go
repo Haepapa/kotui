@@ -198,7 +198,50 @@ func (s *WarRoomService) CreateProject(ctx context.Context, name, description st
 	if err := s.SwitchProject(ctx, p.ID); err != nil {
 		return nil, err
 	}
+	s.emitProjectsChanged(ctx)
 	return &p, nil
+}
+
+// RenameProject updates the name and description of an existing project.
+func (s *WarRoomService) RenameProject(ctx context.Context, id, name, description string) error {
+	if err := s.db.RenameProject(ctx, id, name, description); err != nil {
+		return err
+	}
+	s.emitProjectsChanged(ctx)
+	return nil
+}
+
+// ArchiveProject hides a project from the sidebar. If the project is active,
+// the next project becomes active; if none remain, the UI shows an empty state.
+func (s *WarRoomService) ArchiveProject(ctx context.Context, id string) error {
+	if err := s.db.ArchiveProject(ctx, id); err != nil {
+		return err
+	}
+	// If we just archived the active project, activate the most recent remaining one.
+	s.mu.RLock()
+	wasActive := id == "" // re-read below
+	s.mu.RUnlock()
+	proj, _ := s.db.GetProject(ctx, id)
+	if proj != nil {
+		wasActive = proj.Active
+	}
+	if wasActive {
+		if projects, err := s.db.ListProjects(ctx); err == nil && len(projects) > 0 {
+			// Activate the most recent non-archived project.
+			_ = s.SwitchProject(ctx, projects[len(projects)-1].ID)
+		}
+	}
+	s.emitProjectsChanged(ctx)
+	return nil
+}
+
+// emitProjectsChanged fetches the current project list and emits it to the frontend.
+func (s *WarRoomService) emitProjectsChanged(ctx context.Context) {
+	projects, err := s.db.ListProjects(ctx)
+	if err != nil {
+		return
+	}
+	s.app.Event.Emit("kotui:projects", projects)
 }
 
 // SwitchProject marks a project as active and resets the Orchestrator context.
