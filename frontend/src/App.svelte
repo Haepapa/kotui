@@ -4,6 +4,8 @@
   import ChatArea from './components/ChatArea.svelte';
   import EngineRoom from './components/EngineRoom.svelte';
   import ModeToggle from './components/ModeToggle.svelte';
+  import Settings from './components/Settings.svelte';
+  import CompanyIdentityEditor from './components/CompanyIdentityEditor.svelte';
   import {
     wr,
     initWarRoom,
@@ -11,6 +13,9 @@
     visibleMessages,
     engineRoomMessages,
     toggleMode,
+    switchToSettings,
+    switchToIdentity,
+    switchToChat,
   } from './stores/warroom.svelte';
 
   let theme = $state<'dark' | 'light'>('dark');
@@ -35,6 +40,13 @@
 
   // Active channel title
   const activeProject = $derived(wr.projects.find(p => p.id === wr.activeProjectID));
+
+  const channelTitle = $derived(() => {
+    if (wr.activeView === 'settings') return 'Infrastructure Office';
+    if (wr.activeView === 'identity') return 'Company Identity';
+    if (wr.activeView === 'dm') return `@ ${wr.activeDMAgentID}`;
+    return null;
+  });
 </script>
 
 <div class="shell">
@@ -51,10 +63,10 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       {/if}
     </button>
-    <button class="rail-btn" title="Settings (coming soon)" disabled>
+    <button class="rail-btn" title="Settings" onclick={switchToSettings}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
-    <button class="rail-btn" title="Help (coming soon)" disabled>
+    <button class="rail-btn" title="Company Identity" onclick={switchToIdentity}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     </button>
   </div>
@@ -67,7 +79,14 @@
     <!-- Channel header (draggable title bar on macOS) -->
     <header class="channel-header">
       <div class="channel-title">
-        {#if activeProject}
+        {#if wr.activeView === 'settings'}
+          <span class="channel-name">Infrastructure Office</span>
+        {:else if wr.activeView === 'identity'}
+          <span class="channel-name">Company Identity</span>
+        {:else if wr.activeView === 'dm'}
+          <span class="channel-hash">@</span>
+          <span class="channel-name">{wr.activeDMAgentID}</span>
+        {:else if activeProject}
           <span class="channel-hash">#</span>
           <span class="channel-name">{activeProject.name}</span>
           {#if activeProject.description}
@@ -81,15 +100,25 @@
         {#if wr.errorBanner}
           <span class="error-pill">{wr.errorBanner}</span>
         {/if}
-        <ModeToggle mode={wr.viewMode} ontoggle={toggleMode} />
+        {#if wr.activeView === 'chat' || wr.activeView === 'dm'}
+          <ModeToggle mode={wr.viewMode} ontoggle={toggleMode} />
+        {/if}
       </div>
     </header>
 
-    <!-- Chat + optional dev panel -->
+    <!-- Main body — route by activeView -->
     <div class="body">
-      <ChatArea messages={visibleMessages()} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} />
-      {#if wr.viewMode === 'dev'}
-        <EngineRoom messages={engineRoomMessages()} />
+      {#if wr.activeView === 'settings'}
+        <Settings />
+      {:else if wr.activeView === 'identity'}
+        <CompanyIdentityEditor />
+      {:else if wr.activeView === 'dm'}
+        <ChatArea messages={wr.dmMessages} mode={wr.viewMode} isBusy={false} heartbeat={wr.heartbeat} isDM={true} dmAgentID={wr.activeDMAgentID} />
+      {:else}
+        <ChatArea messages={visibleMessages()} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} />
+        {#if wr.viewMode === 'dev'}
+          <EngineRoom messages={engineRoomMessages()} />
+        {/if}
       {/if}
     </div>
   </div>

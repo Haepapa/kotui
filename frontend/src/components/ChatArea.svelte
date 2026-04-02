@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { KotuiMessage, ViewMode, HeartbeatState } from '../lib/types';
-  import { sendBossCommand } from '../lib/warroom';
+  import { sendBossCommand, sendDirectMessage } from '../lib/warroom';
   import { wr } from '../stores/warroom.svelte';
 
   interface Props {
@@ -8,9 +8,11 @@
     mode: ViewMode;
     isBusy: boolean;
     heartbeat: HeartbeatState;
+    isDM?: boolean;
+    dmAgentID?: string;
   }
 
-  let { messages, mode, isBusy, heartbeat }: Props = $props();
+  let { messages, mode, isBusy, heartbeat, isDM = false, dmAgentID = '' }: Props = $props();
 
   let input = $state('');
   let sendError = $state('');
@@ -34,7 +36,11 @@
     sendError = '';
     input = '';
     try {
-      await sendBossCommand(cmd);
+      if (isDM && dmAgentID) {
+        await sendDirectMessage(dmAgentID, cmd);
+      } else {
+        await sendBossCommand(cmd);
+      }
     } catch (e: unknown) {
       sendError = e instanceof Error ? e.message : String(e);
     }
@@ -73,6 +79,29 @@
 
   function avatarInitials(name: string): string {
     return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  }
+
+  // Artifact rendering
+  const artifactPattern = /([\w./\-]+\.(go|ts|svelte|json|md|py|sh|toml|txt|yaml|yml))/g;
+
+  type ContentPart = { type: 'text' | 'artifact'; value: string };
+
+  function renderContent(content: string): ContentPart[] {
+    const parts: ContentPart[] = [];
+    let last = 0;
+    let match: RegExpExecArray | null;
+    artifactPattern.lastIndex = 0;
+    while ((match = artifactPattern.exec(content)) !== null) {
+      if (match.index > last) {
+        parts.push({ type: 'text', value: content.slice(last, match.index) });
+      }
+      parts.push({ type: 'artifact', value: match[1] });
+      last = match.index + match[0].length;
+    }
+    if (last < content.length) {
+      parts.push({ type: 'text', value: content.slice(last) });
+    }
+    return parts.length ? parts : [{ type: 'text', value: content }];
   }
 
   // Pulse breadcrumb for status bar
@@ -128,7 +157,7 @@
               <span class="bubble-time">{formatTime(msg.created_at)}</span>
             </div>
             <div class="bubble bubble-agent" class:tool={msg.kind === 'tool_call' || msg.kind === 'tool_result'}>
-              <p class="bubble-text">{msg.content}</p>
+              <p class="bubble-text">{#each renderContent(msg.content) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else}{part.value}{/if}{/each}</p>
             </div>
           </div>
         </div>
@@ -270,6 +299,19 @@
     line-height: 1.55;
     white-space: pre-wrap;
     margin: 0;
+  }
+  .artifact-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.8125rem;
+    font-family: monospace;
+    color: var(--accent);
+    white-space: nowrap;
   }
   .bubble-time {
     font-size: 0.75rem;

@@ -50,3 +50,32 @@ export interface HeartbeatState {
 }
 
 export type ViewMode = 'boss' | 'dev';
+
+export interface Approval {
+  id: string;
+  project_id: string;
+  kind: string;
+  subject_id: string;
+  description: string;
+  status: string;
+  created_at: string;
+  decided_at?: string;
+}
+
+export interface UIConfig {
+  ollama_endpoint: string;
+  lead_model: string;
+  worker_model: string;
+  embedder_model: string;
+  senior_model: string;
+  senior_endpoint: string;
+  senior_ssh_host: string;
+  senior_ssh_cmd: string;
+  timezone: string;
+  telegram_bot_token: string;
+  slack_bot_token: string;
+  slack_channel_id: string;
+  webhook_secret: string;
+}
+
+export type AppView = 'chat' | 'settings' | 'identity' | 'dm';

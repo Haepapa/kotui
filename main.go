@@ -107,7 +107,7 @@ func main() {
 	})
 
 	// --- War Room service (Wails RPC + event bridge) -------------------
-	wrService := warroom.New(app, db, orch, disp)
+	wrService := warroom.New(app, db, orch, disp, cfg, config.ConfigPath(), "COMPANY_IDENTITY.md")
 	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
 		Name: "WarRoom",
 	}))

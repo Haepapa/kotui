@@ -13,8 +13,11 @@ import {
   onMessage,
   onHeartbeat,
   onError,
+  onApproval,
+  getPendingApprovals,
+  getOrCreateDirectConversation,
 } from '../lib/warroom';
-import type { AgentInfo, HeartbeatState, KotuiMessage, Project, ViewMode } from '../lib/types';
+import type { AgentInfo, AppView, Approval, HeartbeatState, KotuiMessage, Project, ViewMode } from '../lib/types';
 
 // --- Reactive state object ---
 
@@ -35,6 +38,11 @@ export const wr = $state({
   viewMode: 'boss' as ViewMode,
   errorBanner: '',
   isBusy: false,
+  approvals: [] as Approval[],
+  activeView: 'chat' as AppView,
+  activeDMAgentID: '',
+  activeDMConvID: '',
+  dmMessages: [] as KotuiMessage[],
 });
 
 // --- Derived helpers (functions because .svelte.ts can't use $derived at module scope with runes) ---
@@ -54,6 +62,7 @@ export function engineRoomMessages(): KotuiMessage[] {
 let unsubMessage: (() => void) | null = null;
 let unsubHeartbeat: (() => void) | null = null;
 let unsubError: (() => void) | null = null;
+let unsubApproval: (() => void) | null = null;
 
 export async function initWarRoom() {
   unsubMessage = onMessage((msg) => {
@@ -74,6 +83,10 @@ export async function initWarRoom() {
     wr.errorBanner = e.error;
     wr.isBusy = false;
     setTimeout(() => (wr.errorBanner = ''), 8000);
+  });
+
+  unsubApproval = onApproval((approvals) => {
+    wr.approvals = approvals ?? [];
   });
 
   try {
@@ -97,15 +110,51 @@ export async function initWarRoom() {
   } catch (e) {
     console.warn('warroom init:', e);
   }
+
+  await refreshApprovals();
 }
 
 export function destroyWarRoom() {
   unsubMessage?.();
   unsubHeartbeat?.();
   unsubError?.();
+  unsubApproval?.();
 }
 
 export function toggleMode() {
   wr.viewMode = wr.viewMode === 'boss' ? 'dev' : 'boss';
+}
+
+export function switchToChat() {
+  wr.activeView = 'chat';
+}
+
+export function switchToSettings() {
+  wr.activeView = 'settings';
+}
+
+export function switchToIdentity() {
+  wr.activeView = 'identity';
+}
+
+export async function openDM(agentID: string) {
+  try {
+    const convID = await getOrCreateDirectConversation(agentID);
+    wr.activeDMAgentID = agentID;
+    wr.activeDMConvID = convID;
+    wr.dmMessages = (await getMessages(convID, 200)) ?? [];
+    wr.activeView = 'dm';
+  } catch (e) {
+    console.error('openDM:', e);
+  }
+}
+
+export async function refreshApprovals() {
+  try {
+    const approvals = await getPendingApprovals();
+    wr.approvals = approvals ?? [];
+  } catch (e) {
+    console.warn('refreshApprovals:', e);
+  }
 }
 

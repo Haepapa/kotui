@@ -8,5 +8,6 @@ export {
 
 export {
     AgentInfo,
-    HeartbeatState
+    HeartbeatState,
+    UIConfig
 } from "./models.js";

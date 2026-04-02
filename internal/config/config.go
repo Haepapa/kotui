@@ -10,6 +10,11 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// ConfigPath returns the platform-appropriate config file path (public alias for defaultConfigPath).
+func ConfigPath() string {
+	return defaultConfigPath()
+}
+
 // defaultConfigPath returns the platform-appropriate config file path.
 // On Linux/Docker it uses /data/config.toml (the container data volume).
 // On all other platforms it falls back to $XDG_CONFIG_HOME/kotui/config.toml

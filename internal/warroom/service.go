@@ -16,9 +16,13 @@ package warroom
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
+	"github.com/haepapa/kotui/internal/config"
 	"github.com/haepapa/kotui/internal/dispatcher"
 	"github.com/haepapa/kotui/internal/orchestrator"
 	"github.com/haepapa/kotui/internal/store"
@@ -45,6 +49,23 @@ type HeartbeatState struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// UIConfig is a flat serialisable struct covering all user-editable settings.
+type UIConfig struct {
+	OllamaEndpoint   string `json:"ollama_endpoint"`
+	LeadModel        string `json:"lead_model"`
+	WorkerModel      string `json:"worker_model"`
+	EmbedderModel    string `json:"embedder_model"`
+	SeniorModel      string `json:"senior_model"`
+	SeniorEndpoint   string `json:"senior_endpoint"`
+	SeniorSSHHost    string `json:"senior_ssh_host"`
+	SeniorSSHCmd     string `json:"senior_ssh_cmd"`
+	Timezone         string `json:"timezone"`
+	TelegramBotToken string `json:"telegram_bot_token"`
+	SlackBotToken    string `json:"slack_bot_token"`
+	SlackChannelID   string `json:"slack_channel_id"`
+	WebhookSecret    string `json:"webhook_secret"`
+}
+
 // WarRoomService is the Wails-registered service binding.
 // All exported methods become callable from TypeScript via Call.ByName.
 type WarRoomService struct {
@@ -52,6 +73,10 @@ type WarRoomService struct {
 	db   *store.DB
 	orch *orchestrator.Orchestrator
 	disp *dispatcher.Dispatcher
+
+	cfg                 config.Config
+	cfgPath             string
+	companyIdentityPath string
 
 	mu           sync.RWMutex
 	activeConvID string
@@ -65,12 +90,18 @@ func New(
 	db *store.DB,
 	orch *orchestrator.Orchestrator,
 	disp *dispatcher.Dispatcher,
+	cfg config.Config,
+	cfgPath string,
+	companyIdentityPath string,
 ) *WarRoomService {
 	s := &WarRoomService{
-		app:  app,
-		db:   db,
-		orch: orch,
-		disp: disp,
+		app:                 app,
+		db:                  db,
+		orch:                orch,
+		disp:                disp,
+		cfg:                 cfg,
+		cfgPath:             cfgPath,
+		companyIdentityPath: companyIdentityPath,
 		heartbeat: HeartbeatState{
 			IsHealthy:   true,
 			Phase:       "Idle",
@@ -286,4 +317,180 @@ func (s *WarRoomService) GetHeartbeat() HeartbeatState {
 		hb.VRAMProfile = string(s.orch.VRAMProfile())
 	}
 	return hb
+}
+
+// GetPendingApprovals returns all pending approvals for the active project.
+func (s *WarRoomService) GetPendingApprovals(ctx context.Context) ([]models.Approval, error) {
+	if s.db == nil {
+		return nil, nil
+	}
+	p, err := s.db.GetActiveProject(ctx)
+	if err != nil || p == nil {
+		return nil, err
+	}
+	return s.db.ListPendingApprovals(ctx, p.ID)
+}
+
+// DecideApproval approves or rejects a pending approval.
+// decision must be "approved" or "rejected".
+func (s *WarRoomService) DecideApproval(ctx context.Context, id, decision string) error {
+	if s.db == nil {
+		return fmt.Errorf("database not initialised")
+	}
+	approval, err := s.db.GetApproval(ctx, id)
+	if err != nil {
+		return err
+	}
+	if approval == nil {
+		return fmt.Errorf("approval %q not found", id)
+	}
+
+	if approval.Kind == "hiring" && s.orch != nil {
+		if err := s.orch.Hiring().Decide(ctx, approval.ProjectID, id, decision); err != nil {
+			if dbErr := s.db.DecideApproval(ctx, id, decision); dbErr != nil {
+				return dbErr
+			}
+		}
+	} else {
+		if err := s.db.DecideApproval(ctx, id, decision); err != nil {
+			return err
+		}
+	}
+
+	pending, _ := s.db.ListPendingApprovals(ctx, approval.ProjectID)
+	s.app.Event.Emit("kotui:approval", pending)
+	return nil
+}
+
+// GetConfig returns the current configuration as a flat UIConfig.
+func (s *WarRoomService) GetConfig(ctx context.Context) (UIConfig, error) {
+	return UIConfig{
+		OllamaEndpoint:   s.cfg.Ollama.Endpoint,
+		LeadModel:        s.cfg.Models.Lead,
+		WorkerModel:      s.cfg.Models.Specialist,
+		EmbedderModel:    s.cfg.Models.Embedder,
+		SeniorModel:      s.cfg.SeniorConsultant.Model,
+		SeniorEndpoint:   s.cfg.SeniorConsultant.Endpoint,
+		SeniorSSHHost:    s.cfg.SeniorConsultant.SSHHost,
+		SeniorSSHCmd:     s.cfg.SeniorConsultant.SSHStartCmd,
+		Timezone:         s.cfg.App.Timezone,
+		TelegramBotToken: s.cfg.Relay.TelegramBotToken,
+		SlackBotToken:    s.cfg.Relay.SlackBotToken,
+		SlackChannelID:   s.cfg.Relay.SlackChannelID,
+		WebhookSecret:    s.cfg.Relay.WebhookSecret,
+	}, nil
+}
+
+// SaveConfig writes updated settings to disk.
+// Changes take effect on the next app start.
+func (s *WarRoomService) SaveConfig(ctx context.Context, uiCfg UIConfig) error {
+	s.mu.Lock()
+	s.cfg.Ollama.Endpoint = uiCfg.OllamaEndpoint
+	s.cfg.Models.Lead = uiCfg.LeadModel
+	s.cfg.Models.Specialist = uiCfg.WorkerModel
+	s.cfg.Models.Embedder = uiCfg.EmbedderModel
+	s.cfg.SeniorConsultant.Model = uiCfg.SeniorModel
+	s.cfg.SeniorConsultant.Endpoint = uiCfg.SeniorEndpoint
+	s.cfg.SeniorConsultant.SSHHost = uiCfg.SeniorSSHHost
+	s.cfg.SeniorConsultant.SSHStartCmd = uiCfg.SeniorSSHCmd
+	s.cfg.App.Timezone = uiCfg.Timezone
+	s.cfg.Relay.TelegramBotToken = uiCfg.TelegramBotToken
+	s.cfg.Relay.SlackBotToken = uiCfg.SlackBotToken
+	s.cfg.Relay.SlackChannelID = uiCfg.SlackChannelID
+	s.cfg.Relay.WebhookSecret = uiCfg.WebhookSecret
+	cfgCopy := s.cfg
+	cfgPath := s.cfgPath
+	s.mu.Unlock()
+
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		return fmt.Errorf("warroom: save config: mkdir: %w", err)
+	}
+	f, err := os.Create(cfgPath)
+	if err != nil {
+		return fmt.Errorf("warroom: save config: create: %w", err)
+	}
+	defer f.Close()
+	if err := toml.NewEncoder(f).Encode(cfgCopy); err != nil {
+		return fmt.Errorf("warroom: save config: encode: %w", err)
+	}
+	return nil
+}
+
+// GetCompanyIdentity returns the content of COMPANY_IDENTITY.md.
+func (s *WarRoomService) GetCompanyIdentity(ctx context.Context) (string, error) {
+	data, err := os.ReadFile(s.companyIdentityPath)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("warroom: read company identity: %w", err)
+	}
+	return string(data), nil
+}
+
+// SaveCompanyIdentity writes COMPANY_IDENTITY.md and triggers CultureBroadcast.
+func (s *WarRoomService) SaveCompanyIdentity(ctx context.Context, content string) error {
+	if err := os.WriteFile(s.companyIdentityPath, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("warroom: write company identity: %w", err)
+	}
+	if s.orch != nil {
+		if err := s.orch.CultureBroadcast(s.companyIdentityPath); err != nil {
+			return fmt.Errorf("warroom: culture broadcast: %w", err)
+		}
+	}
+	return nil
+}
+
+// GetOrCreateDirectConversation returns or creates a DM conversation for the given agent.
+func (s *WarRoomService) GetOrCreateDirectConversation(ctx context.Context, agentID string) (string, error) {
+	if s.db == nil {
+		return "", fmt.Errorf("database not initialised")
+	}
+	p, err := s.db.GetActiveProject(ctx)
+	if err != nil || p == nil {
+		return "", fmt.Errorf("no active project")
+	}
+	title := "dm:" + agentID
+	convID, err := s.db.GetConversationByTitle(ctx, p.ID, title)
+	if err != nil {
+		return "", err
+	}
+	if convID != "" {
+		return convID, nil
+	}
+	return s.db.CreateConversation(ctx, p.ID, title)
+}
+
+// SendDirectMessage sends a direct feedback message to a specific agent.
+func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message string) error {
+	if s.orch == nil {
+		return fmt.Errorf("orchestrator not initialised")
+	}
+	convID, err := s.GetOrCreateDirectConversation(ctx, agentID)
+	if err != nil {
+		return err
+	}
+	p, err := s.db.GetActiveProject(ctx)
+	if err != nil || p == nil {
+		return fmt.Errorf("no active project")
+	}
+	msg := models.Message{
+		ProjectID:      p.ID,
+		ConversationID: convID,
+		AgentID:        "boss",
+		Kind:           models.KindBossCommand,
+		Tier:           models.TierSummary,
+		Content:        message,
+		CreatedAt:      time.Now(),
+	}
+	if s.db != nil {
+		_ = s.db.SaveMessage(ctx, msg)
+	}
+	s.app.Event.Emit("kotui:message", msg)
+	go func() {
+		if err := s.orch.HandleBossCommand(context.Background(), "[DM to "+agentID+"] "+message); err != nil {
+			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+		}
+	}()
+	return nil
 }

@@ -101,5 +101,77 @@ export class HeartbeatState {
     }
 }
 
+/**
+ * UIConfig is a flat serialisable struct covering all user-editable settings.
+ */
+export class UIConfig {
+    "ollama_endpoint": string;
+    "lead_model": string;
+    "worker_model": string;
+    "embedder_model": string;
+    "senior_model": string;
+    "senior_endpoint": string;
+    "senior_ssh_host": string;
+    "senior_ssh_cmd": string;
+    "timezone": string;
+    "telegram_bot_token": string;
+    "slack_bot_token": string;
+    "slack_channel_id": string;
+    "webhook_secret": string;
+
+    /** Creates a new UIConfig instance. */
+    constructor($$source: Partial<UIConfig> = {}) {
+        if (!("ollama_endpoint" in $$source)) {
+            this["ollama_endpoint"] = "";
+        }
+        if (!("lead_model" in $$source)) {
+            this["lead_model"] = "";
+        }
+        if (!("worker_model" in $$source)) {
+            this["worker_model"] = "";
+        }
+        if (!("embedder_model" in $$source)) {
+            this["embedder_model"] = "";
+        }
+        if (!("senior_model" in $$source)) {
+            this["senior_model"] = "";
+        }
+        if (!("senior_endpoint" in $$source)) {
+            this["senior_endpoint"] = "";
+        }
+        if (!("senior_ssh_host" in $$source)) {
+            this["senior_ssh_host"] = "";
+        }
+        if (!("senior_ssh_cmd" in $$source)) {
+            this["senior_ssh_cmd"] = "";
+        }
+        if (!("timezone" in $$source)) {
+            this["timezone"] = "";
+        }
+        if (!("telegram_bot_token" in $$source)) {
+            this["telegram_bot_token"] = "";
+        }
+        if (!("slack_bot_token" in $$source)) {
+            this["slack_bot_token"] = "";
+        }
+        if (!("slack_channel_id" in $$source)) {
+            this["slack_channel_id"] = "";
+        }
+        if (!("webhook_secret" in $$source)) {
+            this["webhook_secret"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new UIConfig instance from a string or object.
+     */
+    static createFrom($$source: any = {}): UIConfig {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new UIConfig($$parsedSource as Partial<UIConfig>);
+    }
+}
+
 // Private type creation functions
 const $$createType0 = $Create.Array($Create.Any);

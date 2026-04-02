@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { createProject, switchProject } from '../lib/warroom';
-  import { wr } from '../stores/warroom.svelte';
+  import { createProject, switchProject, decideApproval } from '../lib/warroom';
+  import { wr, openDM, refreshApprovals } from '../stores/warroom.svelte';
+  import ApprovalCard from './ApprovalCard.svelte';
 
   let showNewProject = $state(false);
   let newName = $state('');
@@ -95,17 +96,22 @@
 
     <!-- Agents -->
     <nav class="nav-section">
-      <div class="nav-label">Agents</div>
+      <div class="nav-label">
+        Agents
+        {#if wr.approvals.length > 0}
+          <span class="approval-badge">{wr.approvals.length}</span>
+        {/if}
+      </div>
       {#each wr.agents as agent (agent.id)}
         <div class="agent-item">
-          <div class="agent-avatar" title="{agent.role}">
+          <button class="agent-avatar" title="{agent.role}" onclick={() => openDM(agent.id)}>
             {initials(agent.name)}
             <span
               class="agent-status-dot"
               style="background:{statusColour[agent.status] ?? '#475569'}"
               title={agent.status}
             ></span>
-          </div>
+          </button>
           <div class="agent-text">
             <div class="agent-name">{agent.name}</div>
             <div class="agent-model">{agent.model || agent.role}</div>
@@ -116,6 +122,16 @@
         <div class="nav-empty">No agents active</div>
       {/if}
     </nav>
+
+    <!-- Approvals -->
+    {#if wr.approvals.length > 0}
+      <nav class="nav-section">
+        <div class="nav-label">Approvals</div>
+        {#each wr.approvals as approval (approval.id)}
+          <ApprovalCard {approval} />
+        {/each}
+      </nav>
+    {/if}
   </div>
 </aside>
 
@@ -255,6 +271,25 @@
     color: var(--agent-avatar-text);
     flex-shrink: 0;
     position: relative;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.12s;
+  }
+  .agent-avatar:hover { opacity: 0.8; }
+  .approval-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f87171;
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: 700;
+    border-radius: 99px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    margin-left: 4px;
+    vertical-align: middle;
   }
   .agent-status-dot {
     position: absolute;

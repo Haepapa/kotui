@@ -10,6 +10,63 @@ import { Create as $Create } from "@wailsio/runtime";
 import * as time$0 from "../../../../../time/models.js";
 
 /**
+ * Approval records a Boss decision on a pending request.
+ */
+export class Approval {
+    "id": string;
+    "project_id": string;
+
+    /**
+     * hiring, skill_promotion, sudo
+     */
+    "kind": string;
+    "subject_id": string;
+    "description": string;
+
+    /**
+     * pending, approved, rejected
+     */
+    "status": string;
+    "created_at": time$0.Time;
+    "decided_at"?: time$0.Time | null;
+
+    /** Creates a new Approval instance. */
+    constructor($$source: Partial<Approval> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("project_id" in $$source)) {
+            this["project_id"] = "";
+        }
+        if (!("kind" in $$source)) {
+            this["kind"] = "";
+        }
+        if (!("subject_id" in $$source)) {
+            this["subject_id"] = "";
+        }
+        if (!("description" in $$source)) {
+            this["description"] = "";
+        }
+        if (!("status" in $$source)) {
+            this["status"] = "";
+        }
+        if (!("created_at" in $$source)) {
+            this["created_at"] = null;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Approval instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Approval {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Approval($$parsedSource as Partial<Approval>);
+    }
+}
+
+/**
  * LogTier controls which event stream a log record is sent to.
  */
 export enum LogTier {
