@@ -413,10 +413,243 @@ func TestIoT_UnknownOperation(t *testing.T) {
 		"operation": "write_gpio",
 	})
 	if err == nil {
-		t.Fatal("expected error for unknown Phase 10 operation")
+		t.Fatal("expected error for unknown operation")
 	}
 	if !strings.Contains(err.Error(), "write_gpio") {
 		t.Errorf("error should mention operation name: %v", err)
+	}
+}
+
+// ============================================================
+// iot_gateway — Phase 10 write operations
+// ============================================================
+
+func TestIoT_WriteOps_RequireConfirm(t *testing.T) {
+	eng, _ := newEngine(t)
+	ops := []map[string]any{
+		{"operation": "firmware_upload", "host": "192.0.2.1", "local_path": "/tmp/fw.bin", "remote_path": "/tmp/fw.bin"},
+		{"operation": "config_write", "host": "192.0.2.1", "config_key": "baud", "config_value": "9600", "remote_path": "/etc/device.conf"},
+		{"operation": "actuator_control", "host": "192.0.2.1", "command": "relay on"},
+	}
+	for _, args := range ops {
+		_, err := exec(t, eng, models.ClearanceSpecialist, "iot_gateway", args)
+		if err == nil {
+			t.Errorf("operation %q without confirm should fail", args["operation"])
+		}
+		if !strings.Contains(err.Error(), "confirm") {
+			t.Errorf("error for %q should mention confirm, got: %v", args["operation"], err)
+		}
+	}
+}
+
+func TestIoT_ActuatorControl_SudoBlocked(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceSpecialist, "iot_gateway", map[string]any{
+		"operation": "actuator_control",
+		"host":      "192.0.2.1",
+		"command":   "sudo shutdown -h now",
+		"confirm":   true,
+	})
+	if err == nil {
+		t.Fatal("expected error for sudo in actuator command")
+	}
+	if !strings.Contains(err.Error(), "sudo") {
+		t.Errorf("error should mention sudo: %v", err)
+	}
+}
+
+func TestIoT_ConfigWrite_ShellMetaBlocked(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceSpecialist, "iot_gateway", map[string]any{
+		"operation":    "config_write",
+		"host":         "192.0.2.1",
+		"config_key":   "key; rm -rf /",
+		"config_value": "value",
+		"remote_path":  "/etc/device.conf",
+		"confirm":      true,
+	})
+	if err == nil {
+		t.Fatal("expected error for shell metacharacter in config_key")
+	}
+	if !strings.Contains(err.Error(), "metacharacter") {
+		t.Errorf("error should mention metacharacter: %v", err)
+	}
+}
+
+func TestIoT_FirmwareUpload_MissingArgs(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceSpecialist, "iot_gateway", map[string]any{
+		"operation": "firmware_upload",
+		"host":      "192.0.2.1",
+		"confirm":   true,
+		// missing local_path and remote_path
+	})
+	if err == nil {
+		t.Fatal("expected error for missing local_path")
+	}
+}
+
+// ============================================================
+// web_search tool
+// ============================================================
+
+func TestWebSearch_PrivateIPBlocked(t *testing.T) {
+	eng, _ := newEngine(t)
+	privateURLs := []string{
+		"http://192.168.1.1/",
+		"http://10.0.0.1/",
+		"http://172.16.0.1/",
+		"http://127.0.0.1/",
+	}
+	for _, u := range privateURLs {
+		_, err := exec(t, eng, models.ClearanceSpecialist, "web_search", map[string]any{
+			"operation": "fetch",
+			"url":       u,
+		})
+		if err == nil {
+			t.Errorf("expected error for private URL %q, got nil", u)
+		}
+	}
+}
+
+func TestWebSearch_InvalidSchemeBlocked(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceSpecialist, "web_search", map[string]any{
+		"operation": "fetch",
+		"url":       "file:///etc/passwd",
+	})
+	if err == nil {
+		t.Fatal("expected error for file:// scheme")
+	}
+	if !strings.Contains(err.Error(), "scheme") {
+		t.Errorf("error should mention scheme: %v", err)
+	}
+}
+
+func TestWebSearch_MissingURL(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceSpecialist, "web_search", map[string]any{
+		"operation": "fetch",
+	})
+	if err == nil {
+		t.Fatal("expected error when url is missing")
+	}
+}
+
+func TestWebSearch_UnknownOperation(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceSpecialist, "web_search", map[string]any{
+		"operation": "post",
+		"url":       "https://example.com",
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown operation")
+	}
+	if !strings.Contains(err.Error(), "post") {
+		t.Errorf("error should mention operation name: %v", err)
+	}
+}
+
+func TestWebSearch_TrialBlocked(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceTrial, "web_search", map[string]any{
+		"operation": "fetch",
+		"url":       "https://example.com",
+	})
+	var pe *mcp.PermissionError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected PermissionError for Trial on web_search, got %T: %v", err, err)
+	}
+}
+
+// ============================================================
+// project_critic tool
+// ============================================================
+
+func TestProjectCritic_Review(t *testing.T) {
+	eng, root := newEngine(t)
+	os.MkdirAll(filepath.Join(root, "src"), 0o755)
+	os.WriteFile(filepath.Join(root, "src", "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "README.md"), []byte("# hello\n"), 0o644)
+	os.WriteFile(filepath.Join(root, "config.json"), []byte(`{"key":"val"}`), 0o644)
+
+	res, err := exec(t, eng, models.ClearanceLead, "project_critic", map[string]any{
+		"operation": "review",
+	})
+	if err != nil {
+		t.Fatalf("review: %v", err)
+	}
+	if !strings.Contains(res.Output, "Project Review") {
+		t.Errorf("expected Project Review header: %q", res.Output)
+	}
+	if !strings.Contains(res.Output, "Go") {
+		t.Errorf("expected Go in language breakdown: %q", res.Output)
+	}
+}
+
+func TestProjectCritic_Verify_ValidFiles(t *testing.T) {
+	eng, root := newEngine(t)
+	os.WriteFile(filepath.Join(root, "ok.json"), []byte(`{"a":1}`), 0o644)
+
+	res, err := exec(t, eng, models.ClearanceLead, "project_critic", map[string]any{
+		"operation": "verify",
+	})
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !strings.Contains(res.Output, "no syntax errors") {
+		t.Errorf("expected no errors: %q", res.Output)
+	}
+}
+
+func TestProjectCritic_Verify_InvalidJSON(t *testing.T) {
+	eng, root := newEngine(t)
+	os.WriteFile(filepath.Join(root, "bad.json"), []byte(`{"a": NOTJSON}`), 0o644)
+
+	res, err := exec(t, eng, models.ClearanceLead, "project_critic", map[string]any{
+		"operation": "verify",
+	})
+	if err != nil {
+		t.Fatalf("verify error: %v", err)
+	}
+	if !strings.Contains(res.Output, "bad.json") {
+		t.Errorf("expected bad.json to appear in issues: %q", res.Output)
+	}
+}
+
+func TestProjectCritic_UnknownOperation(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceLead, "project_critic", map[string]any{
+		"operation": "blame",
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown operation")
+	}
+	if !strings.Contains(err.Error(), "blame") {
+		t.Errorf("error should mention operation name: %v", err)
+	}
+}
+
+func TestProjectCritic_SpecialistBlocked(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceSpecialist, "project_critic", map[string]any{
+		"operation": "review",
+	})
+	var pe *mcp.PermissionError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected PermissionError for Specialist on project_critic, got %T: %v", err, err)
+	}
+}
+
+func TestProjectCritic_SandboxEnforced(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceLead, "project_critic", map[string]any{
+		"operation": "review",
+		"path":      "../../",
+	})
+	var se *mcp.SandboxError
+	if !errors.As(err, &se) {
+		t.Errorf("expected SandboxError for out-of-sandbox path, got %T: %v", err, err)
 	}
 }
 
@@ -430,9 +663,9 @@ func TestRegisterAll_AllToolsPresent(t *testing.T) {
 		t.Fatalf("RegisterAll: %v", err)
 	}
 
-	// All 4 tools should appear in the Lead's system prompt fragment.
+	// All 6 tools should appear in the Lead's system prompt fragment.
 	fragment := eng.SystemPromptFragment(models.ClearanceLead)
-	for _, name := range []string{"filesystem", "shell_executor", "file_manager", "iot_gateway"} {
+	for _, name := range []string{"filesystem", "shell_executor", "file_manager", "iot_gateway", "web_search", "project_critic"} {
 		if !strings.Contains(fragment, name) {
 			t.Errorf("expected %q in system prompt fragment, not found", name)
 		}
@@ -443,9 +676,9 @@ func TestRegisterAll_TrialOnlySeesReadTools(t *testing.T) {
 	eng := mcp.New(t.TempDir())
 	tools.RegisterAll(eng, config.Defaults())
 
-	// Trial clearance should see NO tools (all 4 require Specialist or Lead).
+	// Trial clearance should see NO tools (all 6 require Specialist or Lead).
 	fragment := eng.SystemPromptFragment(models.ClearanceTrial)
-	for _, name := range []string{"filesystem", "shell_executor", "file_manager", "iot_gateway"} {
+	for _, name := range []string{"filesystem", "shell_executor", "file_manager", "iot_gateway", "web_search", "project_critic"} {
 		if strings.Contains(fragment, name) {
 			t.Errorf("Trial should NOT see %q in system prompt", name)
 		}

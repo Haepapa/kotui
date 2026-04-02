@@ -20,6 +20,8 @@ func RegisterAll(eng *mcp.Engine, cfg config.Config) error {
 		shellExecutorTool(box),
 		fileManagerTool(box),
 		iotGatewayTool(cfg),
+		webSearchTool(),
+		projectCriticTool(box),
 	}
 
 	for _, d := range defs {

@@ -1,14 +1,18 @@
-// Package tools/iotgateway implements the read-only IoT gateway MCP tool.
+// Package tools/iotgateway implements the IoT gateway MCP tool.
 //
 // Phase 4 scope (human-verified, read-only):
-//   - discover: enumerate available serial ports and configured SSH hosts
-//   - ping:     check if a host:port is reachable (TCP dial)
-//   - status:   SSH to a device and run a status command
+//   - discover:    enumerate available serial ports and configured SSH hosts
+//   - ping:        check if a host:port is reachable (TCP dial)
+//   - status:      SSH to a device and run a status command
 //   - sensor_read: SSH to a device and run a sensor-read command
 //
-// Write/command capabilities are deferred to Phase 10 (self-built upgrade).
-// Rationale: hardware communication protocols are safety-critical and must be
-// verified by a human developer before agents can send commands to physical devices.
+// Phase 10 scope (self-built, write/command capabilities):
+//   - firmware_upload:  SCP a local file to the device (requires confirm: true)
+//   - config_write:     Write a config value via SSH (requires confirm: true)
+//   - actuator_control: Send an actuator command via SSH (requires confirm: true)
+//
+// Safety: all write operations require confirm: true as an explicit Boss-approval guard.
+// Omitting confirm or setting it to false returns a descriptive error requiring approval.
 package tools
 
 import (
@@ -38,7 +42,7 @@ var iotSchema = json.RawMessage(`{
 	"properties": {
 		"operation": {
 			"type": "string",
-			"description": "discover | ping | status | sensor_read"
+			"description": "discover | ping | status | sensor_read | firmware_upload | config_write | actuator_control"
 		},
 		"host": {
 			"type": "string",
@@ -54,7 +58,27 @@ var iotSchema = json.RawMessage(`{
 		},
 		"command": {
 			"type": "string",
-			"description": "Command to run on the device (status or sensor_read operations)"
+			"description": "Command to run on the device (status, sensor_read, or actuator_control operations)"
+		},
+		"local_path": {
+			"type": "string",
+			"description": "Local file path to upload (firmware_upload only)"
+		},
+		"remote_path": {
+			"type": "string",
+			"description": "Remote destination path on the device (firmware_upload, config_write)"
+		},
+		"config_key": {
+			"type": "string",
+			"description": "Configuration key to set (config_write operation)"
+		},
+		"config_value": {
+			"type": "string",
+			"description": "Configuration value to set (config_write operation)"
+		},
+		"confirm": {
+			"type": "boolean",
+			"description": "Must be explicitly set to true to authorise write/command operations. Boss approval required."
 		}
 	}
 }`)
@@ -63,10 +87,12 @@ func iotGatewayTool(cfg config.Config) mcp.ToolDef {
 	return mcp.ToolDef{
 		Name:      "iot_gateway",
 		Clearance: models.ClearanceSpecialist,
-		Description: "Read-only interface to IoT hardware nodes (Raspberry Pi, LoRa gateways, serial devices). " +
-			"Phase 4 operations: discover (list available devices), ping (connectivity check), " +
+		Description: "Interface to IoT hardware nodes (Raspberry Pi, LoRa gateways, serial devices). " +
+			"Read operations: discover (list available devices), ping (connectivity check), " +
 			"status (SSH device health), sensor_read (SSH sensor query). " +
-			"Write/command capabilities are not available until Phase 10.",
+			"Write operations (require confirm: true — Boss approval): " +
+			"firmware_upload (SCP file to device), config_write (set config key/value via SSH), " +
+			"actuator_control (send actuator command via SSH).",
 		Schema:  iotSchema,
 		Handler: iotHandler(cfg),
 	}
@@ -97,8 +123,14 @@ func iotHandler(cfg config.Config) mcp.Handler {
 				return "", fmt.Errorf("iot_gateway: command too long (max %d chars)", iotSSHMaxCmdLen)
 			}
 			return iotSSH(ctx, args, cmd)
+		case "firmware_upload":
+			return iotFirmwareUpload(ctx, args)
+		case "config_write":
+			return iotConfigWrite(ctx, args)
+		case "actuator_control":
+			return iotActuatorControl(ctx, args)
 		default:
-			return "", fmt.Errorf("iot_gateway: unknown operation %q (must be discover, ping, status, or sensor_read)", op)
+			return "", fmt.Errorf("iot_gateway: unknown operation %q (must be discover, ping, status, sensor_read, firmware_upload, config_write, or actuator_control)", op)
 		}
 	}
 }
@@ -232,4 +264,128 @@ func globPorts(patterns ...string) []string {
 		}
 	}
 	return found
+}
+
+// requireConfirm is the Boss-approval guard for write operations.
+// All Phase 10 write ops must call this before executing.
+func requireConfirm(args map[string]any, op string) error {
+	confirmed, _ := args["confirm"].(bool)
+	if !confirmed {
+		return fmt.Errorf("iot_gateway: operation %q requires Boss approval — "+
+			"set confirm: true once the Boss has explicitly authorised this command", op)
+	}
+	return nil
+}
+
+// iotFirmwareUpload copies a local file to a remote device via SCP.
+// Requires confirm: true (Boss approval guard).
+func iotFirmwareUpload(ctx context.Context, args map[string]any) (string, error) {
+	if err := requireConfirm(args, "firmware_upload"); err != nil {
+		return "", err
+	}
+
+	host, _ := args["host"].(string)
+	if host == "" {
+		return "", fmt.Errorf("iot_gateway: firmware_upload requires a host")
+	}
+	localPath, _ := args["local_path"].(string)
+	if localPath == "" {
+		return "", fmt.Errorf("iot_gateway: firmware_upload requires local_path")
+	}
+	remotePath, _ := args["remote_path"].(string)
+	if remotePath == "" {
+		return "", fmt.Errorf("iot_gateway: firmware_upload requires remote_path")
+	}
+	user := "pi"
+	if u, _ := args["ssh_user"].(string); u != "" {
+		user = u
+	}
+	port := 22
+	if p := toFloat64(args["port"]); p > 0 {
+		port = int(p)
+	}
+
+	scpDest := fmt.Sprintf("%s@%s:%s", user, host, remotePath)
+	scpArgs := []string{
+		"-P", fmt.Sprintf("%d", port),
+		"-o", "ConnectTimeout=10",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "BatchMode=yes",
+		localPath,
+		scpDest,
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(cmdCtx, "scp", scpArgs...).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("iot_gateway: firmware_upload to %s failed: %v\n%s", scpDest, err, string(out))
+	}
+	return fmt.Sprintf("firmware_upload: successfully copied %s → %s", localPath, scpDest), nil
+}
+
+// iotConfigWrite sets a configuration key/value on a remote device via SSH.
+// Uses `echo "key=value" >> remote_path` pattern. Requires confirm: true.
+func iotConfigWrite(ctx context.Context, args map[string]any) (string, error) {
+	if err := requireConfirm(args, "config_write"); err != nil {
+		return "", err
+	}
+
+	host, _ := args["host"].(string)
+	if host == "" {
+		return "", fmt.Errorf("iot_gateway: config_write requires a host")
+	}
+	key, _ := args["config_key"].(string)
+	value, _ := args["config_value"].(string)
+	if key == "" {
+		return "", fmt.Errorf("iot_gateway: config_write requires config_key")
+	}
+	remotePath, _ := args["remote_path"].(string)
+	if remotePath == "" {
+		return "", fmt.Errorf("iot_gateway: config_write requires remote_path (path to config file on device)")
+	}
+
+	// Safety: disallow shell metacharacters in key/value to prevent injection
+	for _, s := range []string{key, value} {
+		if containsShellMeta(s) {
+			return "", fmt.Errorf("iot_gateway: config_write: key/value must not contain shell metacharacters")
+		}
+	}
+
+	cmd := fmt.Sprintf(`grep -q "^%s=" %s && sed -i "s|^%s=.*|%s=%s|" %s || echo "%s=%s" >> %s`,
+		key, remotePath, key, key, value, remotePath, key, value, remotePath)
+
+	return iotSSH(ctx, args, cmd)
+}
+
+// iotActuatorControl sends a command to a physical actuator via SSH.
+// Requires confirm: true (Boss approval guard).
+func iotActuatorControl(ctx context.Context, args map[string]any) (string, error) {
+	if err := requireConfirm(args, "actuator_control"); err != nil {
+		return "", err
+	}
+
+	cmd, _ := args["command"].(string)
+	if cmd == "" {
+		return "", fmt.Errorf("iot_gateway: actuator_control requires a command")
+	}
+	if len(cmd) > iotSSHMaxCmdLen {
+		return "", fmt.Errorf("iot_gateway: command too long (max %d chars)", iotSSHMaxCmdLen)
+	}
+	if containsSudo(cmd) {
+		return "", fmt.Errorf("iot_gateway: sudo is not permitted in actuator commands")
+	}
+
+	return iotSSH(ctx, args, cmd)
+}
+
+// containsShellMeta checks for dangerous shell metacharacters.
+func containsShellMeta(s string) bool {
+	for _, c := range []string{";", "&", "|", "`", "$", "(", ")", "<", ">", "\\", "'"} {
+		if strings.Contains(s, c) {
+			return true
+		}
+	}
+	return false
 }
