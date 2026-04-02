@@ -91,10 +91,20 @@ type SeniorConsultantConfig struct {
 
 // Fields are optional; an empty token disables that relay.
 type RelayConfig struct {
+	// Telegram
 	TelegramBotToken string `toml:"telegram_bot_token"`
-	SlackBotToken    string `toml:"slack_bot_token"`
-	SlackChannelID   string `toml:"slack_channel_id"`
-	WebhookSecret    string `toml:"webhook_secret"`
+	TelegramChatID   string `toml:"telegram_chat_id"`
+	// Slack
+	SlackBotToken     string `toml:"slack_bot_token"`
+	SlackChannelID    string `toml:"slack_channel_id"`
+	SlackSigningSecret string `toml:"slack_signing_secret"`
+	// WhatsApp Cloud API
+	WhatsAppToken       string `toml:"whatsapp_token"`
+	WhatsAppPhoneID     string `toml:"whatsapp_phone_number_id"`
+	WhatsAppVerifyToken string `toml:"whatsapp_verify_token"`
+	// Shared
+	WebhookSecret string `toml:"webhook_secret"` // kept for backward compat
+	WebhookPort   int    `toml:"webhook_port"`   // default 8080; used by Slack/WhatsApp webhooks
 }
 
 // defaultDataDir returns the platform-appropriate data directory.
@@ -133,7 +143,7 @@ func Defaults() Config {
 			SSHStartCmd: "ollama serve",
 		},
 		Project: ProjectConfig{},
-		Relay:   RelayConfig{},
+		Relay:   RelayConfig{WebhookPort: 8080},
 	}
 }
 

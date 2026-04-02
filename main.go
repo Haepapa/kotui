@@ -87,9 +87,58 @@ func runHeadless(cfg config.Config, db *store.DB) {
 		}
 	}
 
-	// Start relay gateway — Phase 12 relay adapters register here.
+	// Start relay gateway — Phase 12 relay adapters registered below.
 	gw := relay.New(disp, slog.Default())
 	defer gw.Close()
+
+	// Command handler for inbound relay commands (/status, /approve, /summary).
+	cmdFn := relay.NewCommandHandler(db, orch, slog.Default())
+
+	// Webhook server (shared by Slack + WhatsApp) — start if either is configured.
+	var webhookSrv *relay.WebhookServer
+	relayLog := slog.Default()
+	if cfg.Relay.SlackBotToken != "" || cfg.Relay.WhatsAppToken != "" {
+		port := cfg.Relay.WebhookPort
+		if port == 0 {
+			port = 8080
+		}
+		webhookSrv = relay.NewWebhookServer(port, relayLog)
+	}
+
+	// Telegram relay.
+	if cfg.Relay.TelegramBotToken != "" {
+		tg := relay.NewTelegramRelay(cfg.Relay.TelegramBotToken, cfg.Relay.TelegramChatID, cmdFn, relayLog)
+		tg.Start()
+		defer tg.Stop()
+		gw.Register(tg)
+	}
+
+	// Slack relay.
+	if cfg.Relay.SlackBotToken != "" {
+		sl := relay.NewSlackRelay(cfg.Relay.SlackBotToken, cfg.Relay.SlackChannelID, cfg.Relay.SlackSigningSecret, cmdFn, relayLog)
+		if webhookSrv != nil {
+			webhookSrv.Register(sl)
+		}
+		gw.Register(sl)
+	}
+
+	// WhatsApp relay.
+	if cfg.Relay.WhatsAppToken != "" {
+		wa := relay.NewWhatsAppRelay(cfg.Relay.WhatsAppToken, cfg.Relay.WhatsAppPhoneID, cfg.Relay.WhatsAppVerifyToken, cfg.Relay.WhatsAppToken, cmdFn, relayLog)
+		if webhookSrv != nil {
+			webhookSrv.Register(wa)
+		}
+		gw.Register(wa)
+	}
+
+	// Start webhook server after all handlers are registered.
+	if webhookSrv != nil {
+		if err := webhookSrv.Start(); err != nil {
+			logging.Console.Warn("webhook server failed to start", "err", err)
+		} else {
+			defer webhookSrv.Stop()
+		}
+	}
 
 	logging.Console.Info("headless backend ready",
 		"data_dir", cfg.App.DataDir,

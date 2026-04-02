@@ -15,9 +15,15 @@
     senior_ssh_cmd: '',
     timezone: '',
     telegram_bot_token: '',
+    telegram_chat_id: '',
     slack_bot_token: '',
     slack_channel_id: '',
+    slack_signing_secret: '',
+    whatsapp_token: '',
+    whatsapp_phone_number_id: '',
+    whatsapp_verify_token: '',
     webhook_secret: '',
+    webhook_port: 8080,
   });
   let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let errorMsg = $state('');
@@ -101,21 +107,54 @@
 
     <section class="settings-section">
       <h3>Remote Messaging</h3>
+      <p class="section-note">Changes apply on next restart. Tokens are stored in config.toml — keep this file secure.</p>
+
+      <h4>Telegram</h4>
       <label>
-        <span>Telegram Bot Token</span>
+        <span>Bot Token</span>
         <input type="password" bind:value={cfg.telegram_bot_token} placeholder="1234567890:ABC..." />
       </label>
       <label>
-        <span>Slack Bot Token</span>
+        <span>Chat ID</span>
+        <input bind:value={cfg.telegram_chat_id} placeholder="Your Telegram chat_id (user or group)" />
+      </label>
+
+      <h4>Slack</h4>
+      <label>
+        <span>Bot Token</span>
         <input type="password" bind:value={cfg.slack_bot_token} placeholder="xoxb-..." />
       </label>
       <label>
-        <span>Slack Channel ID</span>
+        <span>Channel ID</span>
         <input bind:value={cfg.slack_channel_id} placeholder="C0123456789" />
       </label>
       <label>
-        <span>Webhook Secret</span>
-        <input type="password" bind:value={cfg.webhook_secret} placeholder="secret" />
+        <span>Signing Secret</span>
+        <input type="password" bind:value={cfg.slack_signing_secret} placeholder="Slack App signing secret" />
+      </label>
+
+      <h4>WhatsApp</h4>
+      <label>
+        <span>Access Token</span>
+        <input type="password" bind:value={cfg.whatsapp_token} placeholder="WhatsApp Cloud API access token" />
+      </label>
+      <label>
+        <span>Phone Number ID</span>
+        <input bind:value={cfg.whatsapp_phone_number_id} placeholder="Meta phone number ID" />
+      </label>
+      <label>
+        <span>Verify Token</span>
+        <input bind:value={cfg.whatsapp_verify_token} placeholder="Webhook verify token" />
+      </label>
+
+      <h4>Webhook Server</h4>
+      <label>
+        <span>Port</span>
+        <input type="number" bind:value={cfg.webhook_port} placeholder="8080" min="1" max="65535" />
+      </label>
+      <label>
+        <span>Shared Secret</span>
+        <input type="password" bind:value={cfg.webhook_secret} placeholder="Optional HMAC secret" />
       </label>
     </section>
 
@@ -187,6 +226,17 @@
     text-transform: uppercase;
     color: var(--nav-label-color);
     margin: 0 0 0.25rem;
+  }
+  h4 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0.75rem 0 0.25rem;
+  }
+  .section-note {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    margin: 0 0 0.5rem;
   }
   label {
     display: flex;

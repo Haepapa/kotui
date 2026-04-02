@@ -73,9 +73,15 @@ export interface UIConfig {
   senior_ssh_cmd: string;
   timezone: string;
   telegram_bot_token: string;
+  telegram_chat_id: string;
   slack_bot_token: string;
   slack_channel_id: string;
+  slack_signing_secret: string;
+  whatsapp_token: string;
+  whatsapp_phone_number_id: string;
+  whatsapp_verify_token: string;
   webhook_secret: string;
+  webhook_port: number;
 }
 
 export type AppView = 'chat' | 'settings' | 'identity' | 'dm';

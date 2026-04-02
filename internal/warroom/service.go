@@ -61,10 +61,20 @@ type UIConfig struct {
 	SeniorSSHHost    string `json:"senior_ssh_host"`
 	SeniorSSHCmd     string `json:"senior_ssh_cmd"`
 	Timezone         string `json:"timezone"`
+	// Telegram
 	TelegramBotToken string `json:"telegram_bot_token"`
-	SlackBotToken    string `json:"slack_bot_token"`
-	SlackChannelID   string `json:"slack_channel_id"`
-	WebhookSecret    string `json:"webhook_secret"`
+	TelegramChatID   string `json:"telegram_chat_id"`
+	// Slack
+	SlackBotToken      string `json:"slack_bot_token"`
+	SlackChannelID     string `json:"slack_channel_id"`
+	SlackSigningSecret string `json:"slack_signing_secret"`
+	// WhatsApp
+	WhatsAppToken       string `json:"whatsapp_token"`
+	WhatsAppPhoneID     string `json:"whatsapp_phone_number_id"`
+	WhatsAppVerifyToken string `json:"whatsapp_verify_token"`
+	// Shared
+	WebhookSecret string `json:"webhook_secret"`
+	WebhookPort   int    `json:"webhook_port"`
 }
 
 // WarRoomService is the Wails-registered service binding.
@@ -369,19 +379,25 @@ func (s *WarRoomService) DecideApproval(ctx context.Context, id, decision string
 // GetConfig returns the current configuration as a flat UIConfig.
 func (s *WarRoomService) GetConfig(ctx context.Context) (UIConfig, error) {
 	return UIConfig{
-		OllamaEndpoint:   s.cfg.Ollama.Endpoint,
-		LeadModel:        s.cfg.Models.Lead,
-		WorkerModel:      s.cfg.Models.Specialist,
-		EmbedderModel:    s.cfg.Models.Embedder,
-		SeniorModel:      s.cfg.SeniorConsultant.Model,
-		SeniorEndpoint:   s.cfg.SeniorConsultant.Endpoint,
-		SeniorSSHHost:    s.cfg.SeniorConsultant.SSHHost,
-		SeniorSSHCmd:     s.cfg.SeniorConsultant.SSHStartCmd,
-		Timezone:         s.cfg.App.Timezone,
-		TelegramBotToken: s.cfg.Relay.TelegramBotToken,
-		SlackBotToken:    s.cfg.Relay.SlackBotToken,
-		SlackChannelID:   s.cfg.Relay.SlackChannelID,
-		WebhookSecret:    s.cfg.Relay.WebhookSecret,
+		OllamaEndpoint:      s.cfg.Ollama.Endpoint,
+		LeadModel:           s.cfg.Models.Lead,
+		WorkerModel:         s.cfg.Models.Specialist,
+		EmbedderModel:       s.cfg.Models.Embedder,
+		SeniorModel:         s.cfg.SeniorConsultant.Model,
+		SeniorEndpoint:      s.cfg.SeniorConsultant.Endpoint,
+		SeniorSSHHost:       s.cfg.SeniorConsultant.SSHHost,
+		SeniorSSHCmd:        s.cfg.SeniorConsultant.SSHStartCmd,
+		Timezone:            s.cfg.App.Timezone,
+		TelegramBotToken:    s.cfg.Relay.TelegramBotToken,
+		TelegramChatID:      s.cfg.Relay.TelegramChatID,
+		SlackBotToken:       s.cfg.Relay.SlackBotToken,
+		SlackChannelID:      s.cfg.Relay.SlackChannelID,
+		SlackSigningSecret:  s.cfg.Relay.SlackSigningSecret,
+		WhatsAppToken:       s.cfg.Relay.WhatsAppToken,
+		WhatsAppPhoneID:     s.cfg.Relay.WhatsAppPhoneID,
+		WhatsAppVerifyToken: s.cfg.Relay.WhatsAppVerifyToken,
+		WebhookSecret:       s.cfg.Relay.WebhookSecret,
+		WebhookPort:         s.cfg.Relay.WebhookPort,
 	}, nil
 }
 
@@ -399,9 +415,17 @@ func (s *WarRoomService) SaveConfig(ctx context.Context, uiCfg UIConfig) error {
 	s.cfg.SeniorConsultant.SSHStartCmd = uiCfg.SeniorSSHCmd
 	s.cfg.App.Timezone = uiCfg.Timezone
 	s.cfg.Relay.TelegramBotToken = uiCfg.TelegramBotToken
+	s.cfg.Relay.TelegramChatID = uiCfg.TelegramChatID
 	s.cfg.Relay.SlackBotToken = uiCfg.SlackBotToken
 	s.cfg.Relay.SlackChannelID = uiCfg.SlackChannelID
+	s.cfg.Relay.SlackSigningSecret = uiCfg.SlackSigningSecret
+	s.cfg.Relay.WhatsAppToken = uiCfg.WhatsAppToken
+	s.cfg.Relay.WhatsAppPhoneID = uiCfg.WhatsAppPhoneID
+	s.cfg.Relay.WhatsAppVerifyToken = uiCfg.WhatsAppVerifyToken
 	s.cfg.Relay.WebhookSecret = uiCfg.WebhookSecret
+	if uiCfg.WebhookPort > 0 {
+		s.cfg.Relay.WebhookPort = uiCfg.WebhookPort
+	}
 	cfgCopy := s.cfg
 	cfgPath := s.cfgPath
 	s.mu.Unlock()
