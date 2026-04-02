@@ -10,7 +10,26 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-const defaultConfigPath = "/data/config.toml"
+// defaultConfigPath returns the platform-appropriate config file path.
+// On Linux/Docker it uses /data/config.toml (the container data volume).
+// On all other platforms it falls back to $XDG_CONFIG_HOME/kotui/config.toml
+// (typically ~/.config/kotui/config.toml on macOS/Windows).
+func defaultConfigPath() string {
+	// Honour an explicit environment variable first.
+	if p := os.Getenv("KOTUI_CONFIG"); p != "" {
+		return p
+	}
+	// Docker / Linux production: use the /data volume.
+	if _, err := os.Stat("/data"); err == nil {
+		return "/data/config.toml"
+	}
+	// macOS / Windows dev: use the OS user config directory.
+	if dir, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(dir, "kotui", "config.toml")
+	}
+	// Last resort.
+	return filepath.Join(os.TempDir(), "kotui", "config.toml")
+}
 
 // Config is the top-level application configuration.
 type Config struct {
@@ -73,11 +92,22 @@ type RelayConfig struct {
 	WebhookSecret    string `toml:"webhook_secret"`
 }
 
-// Defaults returns a Config populated with safe default values.
+// defaultDataDir returns the platform-appropriate data directory.
+func defaultDataDir() string {
+	if _, err := os.Stat("/data"); err == nil {
+		return "/data"
+	}
+	if dir, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(dir, ".kotui", "data")
+	}
+	return filepath.Join(os.TempDir(), "kotui", "data")
+}
+
+
 func Defaults() Config {
 	return Config{
 		App: AppConfig{
-			DataDir:  "/data",
+			DataDir:  defaultDataDir(),
 			Timezone: "Pacific/Auckland",
 			Headless: false,
 		},
@@ -108,7 +138,7 @@ func Load(path string) (Config, error) {
 	cfg := Defaults()
 
 	if path == "" {
-		path = defaultConfigPath
+		path = defaultConfigPath()
 	}
 
 	data, err := os.ReadFile(path)
