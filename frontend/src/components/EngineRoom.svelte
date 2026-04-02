@@ -27,20 +27,14 @@
 
   function formatTime(iso: string): string {
     try {
-      return new Date(iso).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    } catch {
-      return '??:??:??';
-    }
+      return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch { return ''; }
   }
 </script>
 
 <aside class="engine-room">
   <div class="er-header">
-    <span class="er-title">⚙️ Engine Room</span>
+    <span class="er-title">Dev Console</span>
     <span class="er-count">{messages.length}</span>
   </div>
   <div class="er-console" bind:this={consoleEl}>
@@ -55,38 +49,33 @@
       </div>
     {/each}
     {#if messages.length === 0}
-      <div class="er-empty">Raw log is empty — switch to Dev Mode to see agent internals.</div>
+      <div class="er-empty">Raw logs appear here in Dev mode.</div>
     {/if}
   </div>
 </aside>
 
 <style>
   .engine-room {
-    width: 300px;
+    width: 280px;
     flex-shrink: 0;
-    background: #070c14;
-    border-left: 1px solid #0f172a;
+    background: #0e1017;
+    border-left: 1px solid #1e2029;
     display: flex;
     flex-direction: column;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
   }
   .er-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #0f172a;
-    background: #0b1020;
+    border-bottom: 1px solid #1e2029;
+    flex-shrink: 0;
   }
-  .er-title {
-    font-size: 0.75rem;
-    color: #64748b;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-  }
+  .er-title { font-size: 0.75rem; color: #475569; font-weight: 600; letter-spacing: 0.04em; }
   .er-count {
     font-size: 0.6875rem;
-    background: #1e293b;
+    background: #1e2029;
     color: #475569;
     border-radius: 10px;
     padding: 0.1rem 0.4rem;
@@ -97,28 +86,22 @@
     padding: 0.5rem;
     display: flex;
     flex-direction: column;
-    gap: 0.125rem;
+    gap: 0.1rem;
   }
+  .er-console::-webkit-scrollbar { width: 4px; }
+  .er-console::-webkit-scrollbar-thumb { background: #1e2029; border-radius: 4px; }
   .log-line {
     display: flex;
     gap: 0.375rem;
     font-size: 0.6875rem;
     line-height: 1.5;
-    flex-wrap: wrap;
     align-items: baseline;
+    flex-wrap: wrap;
   }
-  .log-time { color: #334155; white-space: nowrap; }
+  .log-time { color: #2a2d35; white-space: nowrap; }
   .log-kind { font-weight: 600; white-space: nowrap; }
-  .log-agent { color: #7dd3fc; white-space: nowrap; }
-  .log-content {
-    color: #64748b;
-    word-break: break-word;
-    flex: 1;
-  }
-  .er-empty {
-    font-size: 0.6875rem;
-    color: #1e293b;
-    padding: 1rem;
-    text-align: center;
-  }
+  .log-agent { color: #60a5fa; white-space: nowrap; }
+  .log-content { color: #475569; word-break: break-word; flex: 1; min-width: 0; }
+  .er-empty { font-size: 0.6875rem; color: #1e2029; padding: 1rem; text-align: center; }
 </style>
+
