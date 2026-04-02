@@ -52,6 +52,12 @@ func runGUI(cfg config.Config, db *store.DB) {
 		orch = nil
 	}
 
+	// Wire up the StorePersister so every Dispatcher message is saved to SQLite.
+	// This ensures agent responses, tool calls, and thinking are persisted and
+	// can be reloaded when the user switches conversations.
+	persister := store.NewStorePersister(db, slog.Default())
+	disp.Subscribe("", persister.Handle)
+
 	if cfg.Project.ActiveProjectID != "" && orch != nil {
 		if err := orch.SetProject(context.Background(), cfg.Project.ActiveProjectID); err != nil {
 			logging.Console.Warn("could not restore active project", "err", err)

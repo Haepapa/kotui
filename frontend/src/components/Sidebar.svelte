@@ -135,14 +135,14 @@
             </div>
           </div>
         {:else}
-          <div class="nav-item-wrap" class:active={p.id === wr.activeProjectID}>
+          <div class="nav-item-wrap" class:active={wr.activeView !== 'dm' && p.id === wr.activeProjectID}>
             <button
               class="nav-item"
-              class:active={p.id === wr.activeProjectID}
+              class:active={wr.activeView !== 'dm' && p.id === wr.activeProjectID}
               onclick={() => handleSwitch(p.id)}
               title={p.description || p.name}
             >
-              {#if p.id === wr.activeProjectID}
+              {#if wr.activeView !== 'dm' && p.id === wr.activeProjectID}
                 <span class="active-pip"></span>
               {/if}
               <span class="nav-hash">#</span>

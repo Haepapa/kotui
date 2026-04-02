@@ -46,6 +46,7 @@ export const wr = $state({
   activeDMAgentID: '',
   activeDMConvID: '',
   dmMessages: [] as KotuiMessage[],
+  dmRawMessages: [] as KotuiMessage[],
 });
 
 // --- Derived helpers (functions because .svelte.ts can't use $derived at module scope with runes) ---
@@ -57,6 +58,9 @@ export function visibleMessages(): KotuiMessage[] {
 }
 
 export function engineRoomMessages(): KotuiMessage[] {
+  if (wr.activeView === 'dm') {
+    return wr.dmRawMessages;
+  }
   return wr.messages.filter((m) => m.tier === 'raw');
 }
 
@@ -72,8 +76,12 @@ export async function initWarRoom() {
   unsubMessage = onMessage((msg) => {
     // Route messages to the right conversation buffer.
     if (msg.conversation_id && msg.conversation_id === wr.activeDMConvID) {
-      // Message belongs to the active DM — append to dmMessages.
-      wr.dmMessages.push(msg);
+      // Message belongs to the active DM — split by tier.
+      if (msg.tier === 'raw') {
+        wr.dmRawMessages.push(msg);
+      } else {
+        wr.dmMessages.push(msg);
+      }
     } else {
       // Message belongs to the war-room channel.
       wr.messages.push(msg);
@@ -170,7 +178,9 @@ export async function openDM(agentID: string) {
     if (!convID) throw new Error('No conversation ID returned');
     wr.activeDMAgentID = agentID;
     wr.activeDMConvID = convID;
-    wr.dmMessages = (await getMessages(convID, 200)) ?? [];
+    const allMsgs = (await getMessages(convID, 200)) ?? [];
+    wr.dmMessages = allMsgs.filter((m) => m.tier !== 'raw');
+    wr.dmRawMessages = allMsgs.filter((m) => m.tier === 'raw');
     wr.activeView = 'dm';
   } catch (e) {
     console.error('openDM:', e);

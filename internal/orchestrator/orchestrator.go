@@ -321,11 +321,31 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 		}
 	}
 
+	// Dispatch a raw "thinking" indicator so the dev window shows activity.
+	o.disp.Dispatch(models.Message{
+		ProjectID:      o.projectID,
+		ConversationID: convID,
+		AgentID:        agentID,
+		Kind:           models.KindSystemEvent,
+		Tier:           models.TierRaw,
+		Content:        fmt.Sprintf("[%s] thinking…", agentID),
+	})
+
 	// Call the agent directly.
 	response, err := ra.Turn(ctx, augmented)
 	if err != nil {
 		return fmt.Errorf("dm %s: %w", agentID, err)
 	}
+
+	// Dispatch the raw response so the dev window can show the full text.
+	o.disp.Dispatch(models.Message{
+		ProjectID:      o.projectID,
+		ConversationID: convID,
+		AgentID:        agentID,
+		Kind:           models.KindAgentMessage,
+		Tier:           models.TierRaw,
+		Content:        response,
+	})
 
 	// Dispatch the agent reply to the DM conversation (not the war-room convID).
 	o.disp.Dispatch(models.Message{
