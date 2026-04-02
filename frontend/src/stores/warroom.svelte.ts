@@ -95,7 +95,7 @@ export async function initWarRoom() {
 
   // Refresh project list whenever the backend signals a change.
   unsubProjects = Events.On('kotui:projects', (event: any) => {
-    const projects: Project[] = event?.data?.[0] ?? [];
+    const projects: Project[] = (event?.data as Project[]) ?? [];
     wr.projects = projects;
     const active = projects.find((p) => p.active);
     if (active && active.id !== wr.activeProjectID) {

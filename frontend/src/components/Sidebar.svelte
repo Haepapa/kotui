@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createProject, switchProject, getActiveConversation, getMessages } from '../lib/warroom';
+  import { createProject, switchProject, getActiveConversation, getMessages, getProjects } from '../lib/warroom';
   import { wr, openDM, refreshApprovals, renameChannel, archiveChannel } from '../stores/warroom.svelte';
   import ApprovalCard from './ApprovalCard.svelte';
 
@@ -38,10 +38,11 @@
     if (!newName.trim()) return;
     try {
       await createProject(newName.trim(), newDesc.trim());
+      // Eagerly refresh project list (event from backend also triggers this).
+      wr.projects = (await getProjects()) ?? [];
       showNewProject = false;
       newName = '';
       newDesc = '';
-      // The kotui:projects event from the backend will refresh wr.projects automatically.
     } catch (e) {
       console.error('createProject:', e);
     }
