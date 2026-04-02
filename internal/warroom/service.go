@@ -563,23 +563,28 @@ func (s *WarRoomService) SaveCompanyIdentity(ctx context.Context, content string
 }
 
 // GetOrCreateDirectConversation returns or creates a DM conversation for the given agent.
+// DM conversations are agent-global — the same conversation is reused regardless of
+// which project is currently active. The first time a DM is opened for an agent the
+// conversation is created inside the active project (for FK integrity), but on every
+// subsequent call the existing conversation is returned irrespective of active project.
 func (s *WarRoomService) GetOrCreateDirectConversation(ctx context.Context, agentID string) (string, error) {
 	if s.db == nil {
 		return "", fmt.Errorf("database not initialised")
 	}
-	p, err := s.db.GetActiveProject(ctx)
-	if err != nil || p == nil {
-		return "", fmt.Errorf("no active project")
-	}
-	title := "dm:" + agentID
-	convID, err := s.db.GetConversationByTitle(ctx, p.ID, title)
+	// Search across all projects first — DMs must survive project switches.
+	convID, err := s.db.GetDMConversation(ctx, agentID)
 	if err != nil {
 		return "", err
 	}
 	if convID != "" {
 		return convID, nil
 	}
-	return s.db.CreateConversation(ctx, p.ID, title)
+	// No existing DM conversation — create one in the active project.
+	p, err := s.db.GetActiveProject(ctx)
+	if err != nil || p == nil {
+		return "", fmt.Errorf("no active project")
+	}
+	return s.db.CreateConversation(ctx, p.ID, "dm:"+agentID)
 }
 
 // SendDirectMessage sends a message directly to a specific agent and routes the

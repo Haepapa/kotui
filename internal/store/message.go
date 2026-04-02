@@ -131,6 +131,26 @@ func (db *DB) GetConversationByTitle(ctx context.Context, projectID, title strin
 	return id, nil
 }
 
+// GetDMConversation returns the conversation ID for a DM with the given agent,
+// searching across ALL projects. DM conversations use the title "dm:<agentID>".
+// Returns ("", nil) if no such conversation exists yet.
+// This makes DM history agent-global — not scoped to the currently active project.
+func (db *DB) GetDMConversation(ctx context.Context, agentID string) (string, error) {
+	title := "dm:" + agentID
+	var id string
+	err := db.QueryRowContext(ctx,
+		`SELECT id FROM conversations WHERE title = ? ORDER BY created_at ASC LIMIT 1`,
+		title,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: get dm conversation for %s: %w", agentID, err)
+	}
+	return id, nil
+}
+
 // GetLatestConversation returns the ID of the most recent conversation for a
 // project. Returns ("", nil) if none exists.
 func (db *DB) GetLatestConversation(ctx context.Context, projectID string) (string, error) {
