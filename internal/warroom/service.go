@@ -582,7 +582,8 @@ func (s *WarRoomService) GetOrCreateDirectConversation(ctx context.Context, agen
 	return s.db.CreateConversation(ctx, p.ID, title)
 }
 
-// SendDirectMessage sends a direct feedback message to a specific agent.
+// SendDirectMessage sends a message directly to a specific agent and routes the
+// response back to the DM conversation window — bypassing the Lead/Worker pipeline.
 func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message string) error {
 	if s.orch == nil {
 		return fmt.Errorf("orchestrator not initialised")
@@ -595,7 +596,9 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 	if err != nil || p == nil {
 		return fmt.Errorf("no active project")
 	}
-	msg := models.Message{
+
+	// Persist and emit the user's message to the DM conversation immediately.
+	userMsg := models.Message{
 		ProjectID:      p.ID,
 		ConversationID: convID,
 		AgentID:        "boss",
@@ -605,15 +608,19 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 		CreatedAt:      time.Now(),
 	}
 	if s.db != nil {
-		_ = s.db.SaveMessage(ctx, msg)
+		_ = s.db.SaveMessage(ctx, userMsg)
 	}
-	s.app.Event.Emit("kotui:message", msg)
-	// Index as boss feedback for recall.
+	s.app.Event.Emit("kotui:message", userMsg)
+
+	// Index the message in memory for later recall.
 	if s.mem != nil {
 		s.mem.IndexAsync(ctx, agentID, p.ID, message, true)
 	}
+
+	// Call the agent directly in a goroutine — response is dispatched back to
+	// convID (the DM conversation) by HandleDirectMessage, not to the war-room.
 	go func() {
-		if err := s.orch.HandleBossCommand(context.Background(), "[DM to "+agentID+"] "+message); err != nil {
+		if err := s.orch.HandleDirectMessage(context.Background(), agentID, message, convID); err != nil {
 			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
 		}
 	}()

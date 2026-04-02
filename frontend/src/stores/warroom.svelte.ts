@@ -70,7 +70,14 @@ let unsubProjects: (() => void) | null = null;
 
 export async function initWarRoom() {
   unsubMessage = onMessage((msg) => {
-    wr.messages.push(msg);
+    // Route messages to the right conversation buffer.
+    if (msg.conversation_id && msg.conversation_id === wr.activeDMConvID) {
+      // Message belongs to the active DM — append to dmMessages.
+      wr.dmMessages.push(msg);
+    } else {
+      // Message belongs to the war-room channel.
+      wr.messages.push(msg);
+    }
     if (msg.kind === 'boss_command' || msg.kind === 'agent_message') {
       wr.isBusy = true;
     }

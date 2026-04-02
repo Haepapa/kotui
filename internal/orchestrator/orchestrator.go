@@ -62,6 +62,11 @@ type Orchestrator struct {
 
 	memory *memory.Store // nil if EmbedderModel is empty
 
+	// dmAgents holds one isolated RunningAgent per agentID for DM conversations.
+	// These are separate from the war-room Lead so their histories don't mix.
+	dmAgents   map[string]*RunningAgent
+	dmAgentsMu sync.Mutex
+
 	projectID string
 	convID    string
 }
@@ -280,6 +285,88 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 	}
 
 	return nil
+}
+
+// HandleDirectMessage sends a message directly to a named agent and dispatches
+// the response back to the supplied DM conversation ID.
+//
+// Unlike HandleBossCommand, this bypasses Lead task-decomposition entirely.
+// Each agentID gets its own isolated RunningAgent with the agent's real system
+// prompt so DM history never mixes with the war-room conversation.
+func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message, convID string) error {
+	// Resolve the DM agent — create on first use, reuse thereafter.
+	o.dmAgentsMu.Lock()
+	if o.dmAgents == nil {
+		o.dmAgents = make(map[string]*RunningAgent)
+	}
+	ra, exists := o.dmAgents[agentID]
+	if !exists {
+		model, clearance, sysPrompt := o.agentIdentityForDM(agentID)
+		ra = newRunningAgent(
+			agentID, agentID,
+			model, clearance,
+			ollama.Forever(),
+			sysPrompt,
+			o.inferrer, o.mcpEng,
+		)
+		o.dmAgents[agentID] = ra
+	}
+	o.dmAgentsMu.Unlock()
+
+	// Optionally augment the message with recalled memories.
+	augmented := message
+	if o.memory != nil && o.projectID != "" {
+		if entries, err := o.memory.Recall(ctx, agentID, o.projectID, message, 5); err == nil && len(entries) > 0 {
+			augmented = memory.FormatRecall(entries) + "\n\n" + message
+		}
+	}
+
+	// Call the agent directly.
+	response, err := ra.Turn(ctx, augmented)
+	if err != nil {
+		return fmt.Errorf("dm %s: %w", agentID, err)
+	}
+
+	// Dispatch the agent reply to the DM conversation (not the war-room convID).
+	o.disp.Dispatch(models.Message{
+		ProjectID:      o.projectID,
+		ConversationID: convID,
+		AgentID:        agentID,
+		Kind:           models.KindAgentMessage,
+		Tier:           models.TierSummary,
+		Content:        response,
+	})
+	return nil
+}
+
+// agentIdentityForDM returns the model, clearance, and compiled system prompt
+// for the named agent. Falls back to Lead identity when the agent is unknown.
+func (o *Orchestrator) agentIdentityForDM(agentID string) (model string, clearance models.Clearance, sysPrompt string) {
+	switch agentID {
+	case "lead":
+		o.leadMu.Lock()
+		sysPrompt = o.leadAgent.SystemPrompt()
+		o.leadMu.Unlock()
+		return o.cfg.LeadModel, models.ClearanceLead, sysPrompt
+
+	default:
+		// Try to load the agent's compiled instruction.md from its data directory.
+		spawnCfg := agent.SpawnConfig{
+			ID:                  agentID,
+			Name:                agentID,
+			Role:                models.RoleSpecialist,
+			Model:               o.cfg.WorkerModel,
+			DataDir:             o.cfg.DataDir,
+			CompanyIdentityPath: o.cfg.CompanyIdentityPath,
+			MCPFragment:         o.mcpEng.SystemPromptFragment(models.ClearanceSpecialist),
+		}
+		if a, err := agent.Spawn(spawnCfg); err == nil {
+			return o.cfg.WorkerModel, models.ClearanceSpecialist, a.SystemPrompt()
+		}
+		// Fallback: simple helpful assistant.
+		return o.cfg.WorkerModel, models.ClearanceSpecialist,
+			"You are a helpful AI assistant. Respond clearly and concisely."
+	}
 }
 
 // CultureBroadcast forces a full context reset on all active agents.

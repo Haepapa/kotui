@@ -179,7 +179,8 @@ export function SendBossCommand(command: string): $CancellablePromise<void> {
 }
 
 /**
- * SendDirectMessage sends a direct feedback message to a specific agent.
+ * SendDirectMessage sends a message directly to a specific agent and routes the
+ * response back to the DM conversation window — bypassing the Lead/Worker pipeline.
  */
 export function SendDirectMessage(agentID: string, message: string): $CancellablePromise<void> {
     return $Call.ByID(3506599419, agentID, message);
