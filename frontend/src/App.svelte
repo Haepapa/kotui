@@ -10,8 +10,6 @@
     wr,
     initWarRoom,
     destroyWarRoom,
-    visibleMessages,
-    engineRoomMessages,
     toggleMode,
     switchToSettings,
     switchToIdentity,
@@ -40,6 +38,16 @@
 
   // Active channel title
   const activeProject = $derived(wr.projects.find(p => p.id === wr.activeProjectID));
+
+  // Derived message lists — kept here (not imported fns) to guarantee Svelte 5 reactive tracking
+  const visibleMsgs = $derived(
+    wr.viewMode === 'boss'
+      ? wr.messages.filter(m => m.tier === 'summary')
+      : wr.messages
+  );
+  const engineMsgs = $derived(
+    wr.messages.filter(m => m.tier === 'raw')
+  );
 
   const channelTitle = $derived(() => {
     if (wr.activeView === 'settings') return 'Infrastructure Office';
@@ -126,9 +134,9 @@
           <EngineRoom messages={wr.dmConvRaw[wr.activeDMConvID] ?? []} />
         {/if}
       {:else}
-        <ChatArea messages={visibleMessages()} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} />
+        <ChatArea messages={visibleMsgs} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} />
         {#if wr.viewMode === 'dev'}
-          <EngineRoom messages={engineRoomMessages()} />
+          <EngineRoom messages={engineMsgs} />
         {/if}
       {/if}
     </div>
