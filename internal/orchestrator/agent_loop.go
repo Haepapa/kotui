@@ -316,19 +316,22 @@ func (e *EscalationNeededError) Error() string {
 // decomposePrompt returns the instruction used to ask the Lead to decompose
 // a Boss command into a list of sub-tasks.
 func decomposePrompt(bossCommand string) string {
-	return fmt.Sprintf(`The Boss has issued the following command:
+	return fmt.Sprintf(`You are the Lead agent in a team channel. A message has arrived:
 
 ---
 %s
 ---
 
-Decompose this into an ordered list of sub-tasks. Emit the list as a single JSON array on one line, then briefly explain your plan.
+Decide how to respond:
 
-Format:
-[{"id":"t1","title":"short title","description":"detail","assignee":"specialist"},...]
+**If this is a task or request that requires work** (e.g. "build X", "write Y", "research Z", "find out…"):
+1. Decompose it into sub-tasks as a JSON array on ONE line, then briefly explain your plan.
+   Format: [{"id":"t1","title":"short title","description":"detail","assignee":"lead|specialist"},...]
+   Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; dependencies first.
 
-Rules:
-- assignee must be "lead" (for planning/verification tasks) or "specialist" (for execution tasks)
-- keep each description to 1–2 sentences
-- order tasks so dependencies come first`, strings.TrimSpace(bossCommand))
+**If this is conversational** (greetings, general discussion, questions, "hi team", etc.):
+1. Respond naturally and warmly as the team lead — no JSON, no task list.
+2. Acknowledge any team members mentioned and set a positive tone.
+
+Respond appropriately now.`, strings.TrimSpace(bossCommand))
 }

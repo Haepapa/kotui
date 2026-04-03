@@ -15,6 +15,7 @@ import {
   onError,
   onApproval,
   onAgents,
+  onChannelBusy,
   getPendingApprovals,
   getOrCreateDirectConversation,
   renameProject,
@@ -93,6 +94,7 @@ let unsubHeartbeat: (() => void) | null = null;
 let unsubError: (() => void) | null = null;
 let unsubApproval: (() => void) | null = null;
 let unsubAgents: (() => void) | null = null;
+let unsubChannelBusy: (() => void) | null = null;
 let unsubProjects: (() => void) | null = null;
 let unsubDMBusy: (() => void) | null = null;
 let unsubDMStream: (() => void) | null = null;
@@ -112,15 +114,15 @@ export async function initWarRoom() {
         wr.dmConvMsgs[cid] = [...(wr.dmConvMsgs[cid] ?? []), msg];
       }
     } else {
-      // War-room channel message.
-      wr.messages.push(msg);
-      if (msg.kind === 'boss_command' || msg.kind === 'agent_message') {
-        wr.isBusy = true;
-      }
-      if (msg.kind === 'milestone' || msg.kind === 'system_event') {
-        wr.isBusy = false;
-      }
+      // War-room channel message — use array replacement for reliable reactivity.
+      wr.messages = [...wr.messages, msg];
     }
+  });
+
+  // Channel busy state — driven by kotui:channel_busy, NOT by message kinds.
+  // This prevents raw system_event log messages from clearing the typing indicator.
+  unsubChannelBusy = onChannelBusy((busy) => {
+    wr.isBusy = busy;
   });
 
   unsubHeartbeat = onHeartbeat((hb) => {
@@ -204,6 +206,7 @@ export function destroyWarRoom() {
   unsubError?.();
   unsubApproval?.();
   unsubAgents?.();
+  unsubChannelBusy?.();
   unsubProjects?.();
   unsubDMBusy?.();
   unsubDMStream?.();

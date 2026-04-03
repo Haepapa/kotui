@@ -471,7 +471,9 @@ func (s *WarRoomService) SendBossCommand(ctx context.Context, command string) er
 	if s.orch == nil {
 		return fmt.Errorf("orchestrator not initialised — is Ollama running?")
 	}
+	s.app.Event.Emit("kotui:channel_busy", true)
 	go func() {
+		defer s.app.Event.Emit("kotui:channel_busy", false)
 		if err := s.orch.HandleBossCommand(context.Background(), command); err != nil {
 			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
 		}

@@ -144,3 +144,7 @@ export function onApproval(handler: ApprovalHandler): () => void {
 export function onAgents(handler: AgentsHandler): () => void {
   return Events.On('kotui:agents', (ev) => handler(ev.data as AgentInfo[]));
 }
+
+export function onChannelBusy(handler: (busy: boolean) => void): () => void {
+  return Events.On('kotui:channel_busy', (ev) => handler(ev.data as boolean));
+}
