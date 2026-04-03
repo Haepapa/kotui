@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/haepapa/kotui/internal/agent"
@@ -67,6 +68,11 @@ type Orchestrator struct {
 	// These are separate from the war-room Lead so their histories don't mix.
 	dmAgents   map[string]*RunningAgent
 	dmAgentsMu sync.Mutex
+
+	// dmInferenceMu serialises DM inference so only one Ollama call runs at a time.
+	// Concurrent DM messages are queued; each caller receives a "queued" log line.
+	dmInferenceMu sync.Mutex
+	dmQueueCount  atomic.Int32 // number of callers waiting for dmInferenceMu
 
 	projectID string
 	convID    string
@@ -295,9 +301,10 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 // Each agentID gets its own isolated RunningAgent with the agent's real system
 // prompt so DM history never mixes with the war-room conversation.
 //
+// DM inference is serialised: only one call runs against Ollama at a time.
+// Concurrent callers are queued and receive a visible "queued" status message.
 // onChunk, if non-nil, is called for every streamed token so the caller can
-// forward chunks to the frontend for a live typing effect. Ollama API timings
-// are dispatched as raw-tier log messages for the dev console.
+// forward chunks to the frontend for a live typing effect.
 func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message, convID string, onChunk func(string)) error {
 	// Resolve the DM agent — create on first use, reuse thereafter.
 	o.dmAgentsMu.Lock()
@@ -326,6 +333,23 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 		}
 	}
 
+	// Serialise DM inference — only one Ollama call runs at a time.
+	// If Ollama is busy, notify the user and wait in the queue.
+	if !o.dmInferenceMu.TryLock() {
+		pos := o.dmQueueCount.Add(1)
+		o.disp.Dispatch(models.Message{
+			ProjectID:      o.projectID,
+			ConversationID: convID,
+			AgentID:        agentID,
+			Kind:           models.KindSystemEvent,
+			Tier:           models.TierRaw,
+			Content:        fmt.Sprintf("⏳ queued (position %d) — waiting for Ollama to finish current call", pos),
+		})
+		o.dmInferenceMu.Lock() // blocks until the current call finishes
+		o.dmQueueCount.Add(-1)
+	}
+	defer o.dmInferenceMu.Unlock()
+
 	// Log the outbound Ollama API call to the dev console.
 	o.disp.Dispatch(models.Message{
 		ProjectID:      o.projectID,
@@ -341,7 +365,6 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 	elapsed := time.Since(start)
 
 	if err != nil {
-		// Log the error to the dev console before returning.
 		o.disp.Dispatch(models.Message{
 			ProjectID:      o.projectID,
 			ConversationID: convID,

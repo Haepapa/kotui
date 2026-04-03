@@ -105,6 +105,10 @@ export function GetMessages(conversationID: string, limit: number): $Cancellable
 
 /**
  * GetOrCreateDirectConversation returns or creates a DM conversation for the given agent.
+ * DM conversations are agent-global — the same conversation is reused regardless of
+ * which project is currently active. The first time a DM is opened for an agent the
+ * conversation is created inside the active project (for FK integrity), but on every
+ * subsequent call the existing conversation is returned irrespective of active project.
  */
 export function GetOrCreateDirectConversation(agentID: string): $CancellablePromise<string> {
     return $Call.ByID(2646181570, agentID);

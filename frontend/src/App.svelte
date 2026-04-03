@@ -113,9 +113,17 @@
       {:else if wr.activeView === 'identity'}
         <CompanyIdentityEditor />
       {:else if wr.activeView === 'dm'}
-        <ChatArea messages={wr.dmMessages} mode={wr.viewMode} isBusy={wr.isDMBusy} streamContent={wr.dmStreamContent} heartbeat={wr.heartbeat} isDM={true} dmAgentID={wr.activeDMAgentID} />
+        <ChatArea
+          messages={wr.dmConvMsgs[wr.activeDMConvID] ?? []}
+          mode={wr.viewMode}
+          isBusy={wr.dmConvBusy[wr.activeDMConvID] ?? false}
+          streamContent={wr.dmConvStream[wr.activeDMConvID] ?? ''}
+          heartbeat={wr.heartbeat}
+          isDM={true}
+          dmAgentID={wr.activeDMAgentID}
+        />
         {#if wr.viewMode === 'dev'}
-          <EngineRoom messages={engineRoomMessages()} />
+          <EngineRoom messages={wr.dmConvRaw[wr.activeDMConvID] ?? []} />
         {/if}
       {:else}
         <ChatArea messages={visibleMessages()} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} />

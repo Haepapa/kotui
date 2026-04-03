@@ -45,11 +45,14 @@ export const wr = $state({
   activeView: 'chat' as AppView,
   activeDMAgentID: '',
   activeDMConvID: '',
-  dmMessages: [] as KotuiMessage[],
-  dmRawMessages: [] as KotuiMessage[],
-  // DM streaming state
-  isDMBusy: false,
-  dmStreamContent: '',   // accumulates streamed tokens; cleared when final message arrives
+
+  // Per-conversation DM state — keyed by convID.
+  // This allows multiple DMs to run independently in the background:
+  // navigating away does not reset in-progress state for another conv.
+  dmConvMsgs:   {} as Record<string, KotuiMessage[]>, // summary messages
+  dmConvRaw:    {} as Record<string, KotuiMessage[]>, // raw/dev messages
+  dmConvBusy:   {} as Record<string, boolean>,         // typing indicator
+  dmConvStream: {} as Record<string, string>,           // live streaming content
 });
 
 // --- Derived helpers (functions because .svelte.ts can't use $derived at module scope with runes) ---
@@ -62,9 +65,24 @@ export function visibleMessages(): KotuiMessage[] {
 
 export function engineRoomMessages(): KotuiMessage[] {
   if (wr.activeView === 'dm') {
-    return wr.dmRawMessages;
+    return wr.dmConvRaw[wr.activeDMConvID] ?? [];
   }
   return wr.messages.filter((m) => m.tier === 'raw');
+}
+
+// --- Helpers ---
+
+/** Returns true if convID belongs to a known DM conversation. */
+function isDMConv(convID: string): boolean {
+  return convID in wr.dmConvMsgs || convID === wr.activeDMConvID;
+}
+
+/** Ensure convID is registered in the DM maps (idempotent). */
+function ensureDMConv(convID: string) {
+  if (!(convID in wr.dmConvMsgs))   wr.dmConvMsgs[convID]   = [];
+  if (!(convID in wr.dmConvRaw))    wr.dmConvRaw[convID]    = [];
+  if (!(convID in wr.dmConvBusy))   wr.dmConvBusy[convID]   = false;
+  if (!(convID in wr.dmConvStream)) wr.dmConvStream[convID] = '';
 }
 
 // --- Lifecycle ---
@@ -79,25 +97,27 @@ let unsubDMStream: (() => void) | null = null;
 
 export async function initWarRoom() {
   unsubMessage = onMessage((msg) => {
-    // Route messages to the right conversation buffer.
-    if (msg.conversation_id && msg.conversation_id === wr.activeDMConvID) {
-      // Message belongs to the active DM — split by tier.
+    const cid = msg.conversation_id;
+
+    if (cid && isDMConv(cid)) {
+      // Route to the appropriate DM conversation buffer.
+      ensureDMConv(cid);
       if (msg.tier === 'raw') {
-        wr.dmRawMessages.push(msg);
+        wr.dmConvRaw[cid] = [...(wr.dmConvRaw[cid] ?? []), msg];
       } else {
-        // Final summary response: clear streaming content so the bubble is replaced.
-        wr.dmStreamContent = '';
-        wr.dmMessages.push(msg);
+        // Final summary response — clear live stream so the bubble is replaced.
+        wr.dmConvStream[cid] = '';
+        wr.dmConvMsgs[cid] = [...(wr.dmConvMsgs[cid] ?? []), msg];
       }
     } else {
-      // Message belongs to the war-room channel.
+      // War-room channel message.
       wr.messages.push(msg);
-    }
-    if (msg.kind === 'boss_command' || msg.kind === 'agent_message') {
-      wr.isBusy = true;
-    }
-    if (msg.kind === 'milestone' || msg.kind === 'system_event') {
-      wr.isBusy = false;
+      if (msg.kind === 'boss_command' || msg.kind === 'agent_message') {
+        wr.isBusy = true;
+      }
+      if (msg.kind === 'milestone' || msg.kind === 'system_event') {
+        wr.isBusy = false;
+      }
     }
   });
 
@@ -125,24 +145,26 @@ export async function initWarRoom() {
     }
   });
 
-  // DM agent busy state — controls typing indicator.
+  // DM agent busy state — register convID and control typing indicator.
+  // Fired before inference starts (busy:true) and after it ends (busy:false).
   unsubDMBusy = Events.On('kotui:dm_busy', (event: any) => {
     const payload = event?.data as { conversation_id: string; busy: boolean };
-    if (payload?.conversation_id === wr.activeDMConvID) {
-      wr.isDMBusy = payload.busy;
-      if (!payload.busy) {
-        // Agent finished — ensure streaming content is cleared (belt-and-suspenders).
-        wr.dmStreamContent = '';
-      }
+    if (!payload?.conversation_id) return;
+    const cid = payload.conversation_id;
+    ensureDMConv(cid); // register as a known DM conv so messages route here
+    wr.dmConvBusy[cid] = payload.busy;
+    if (!payload.busy) {
+      wr.dmConvStream[cid] = ''; // belt-and-suspenders clear
     }
   });
 
-  // Streaming token chunks — build up the live preview bubble.
+  // Streaming token chunks — accumulate per conversation.
   unsubDMStream = Events.On('kotui:dm_stream', (event: any) => {
     const payload = event?.data as { conversation_id: string; chunk: string };
-    if (payload?.conversation_id === wr.activeDMConvID) {
-      wr.dmStreamContent += payload.chunk;
-    }
+    if (!payload?.conversation_id) return;
+    const cid = payload.conversation_id;
+    ensureDMConv(cid);
+    wr.dmConvStream[cid] = (wr.dmConvStream[cid] ?? '') + payload.chunk;
   });
 
   try {
@@ -205,14 +227,19 @@ export async function openDM(agentID: string) {
   try {
     const convID = await getOrCreateDirectConversation(agentID);
     if (!convID) throw new Error('No conversation ID returned');
+
     wr.activeDMAgentID = agentID;
     wr.activeDMConvID = convID;
-    wr.isDMBusy = false;
-    wr.dmStreamContent = '';
-    const allMsgs = (await getMessages(convID, 200)) ?? [];
-    wr.dmMessages = allMsgs.filter((m) => m.tier !== 'raw');
-    wr.dmRawMessages = allMsgs.filter((m) => m.tier === 'raw');
     wr.activeView = 'dm';
+
+    // Only load from DB if we don't already have messages in memory.
+    // If the DM is currently in-flight (busy), preserve streaming state.
+    if (!(convID in wr.dmConvMsgs)) {
+      ensureDMConv(convID);
+      const allMsgs = (await getMessages(convID, 200)) ?? [];
+      wr.dmConvMsgs[convID] = allMsgs.filter((m) => m.tier !== 'raw');
+      wr.dmConvRaw[convID]  = allMsgs.filter((m) => m.tier === 'raw');
+    }
   } catch (e) {
     console.error('openDM:', e);
     wr.errorBanner = `Could not open DM: ${e instanceof Error ? e.message : String(e)}`;
@@ -237,3 +264,4 @@ export async function renameChannel(id: string, name: string, description: strin
 export async function archiveChannel(id: string): Promise<void> {
   await archiveProject(id);
 }
+

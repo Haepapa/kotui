@@ -150,12 +150,15 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 
 		var sb strings.Builder
 		for chunk := range ch {
+			// Write content first — the final Done chunk may also carry content.
+			if chunk.Content != "" {
+				sb.WriteString(chunk.Content)
+				if onChunk != nil {
+					onChunk(chunk.Content)
+				}
+			}
 			if chunk.Done {
 				break
-			}
-			sb.WriteString(chunk.Content)
-			if onChunk != nil {
-				onChunk(chunk.Content)
 			}
 		}
 		response := sb.String()
