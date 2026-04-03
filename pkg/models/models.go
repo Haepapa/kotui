@@ -28,7 +28,8 @@ type AgentStatus string
 const (
 	StatusIdle      AgentStatus = "idle"
 	StatusWorking   AgentStatus = "working"
-	StatusParked    AgentStatus = "parked" // VRAM swap mode: offloaded to system RAM
+	StatusParked    AgentStatus = "parked"    // VRAM swap mode: offloaded to system RAM
+	StatusOffline   AgentStatus = "offline"   // Ollama unavailable
 	StatusOnboarded AgentStatus = "onboarded"
 	StatusRejected  AgentStatus = "rejected"
 )

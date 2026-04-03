@@ -191,7 +191,7 @@ export function SendDirectMessage(agentID: string, message: string): $Cancellabl
 }
 
 /**
- * Shutdown stops the event bridge. Called on app teardown.
+ * Shutdown stops the event bridge and health monitor. Called on app teardown.
  */
 export function Shutdown(): $CancellablePromise<void> {
     return $Call.ByID(998849289);

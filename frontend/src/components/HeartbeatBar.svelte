@@ -11,8 +11,13 @@
 
 <footer class="heartbeat-bar">
   <!-- Pulse indicator -->
-  <div class="pulse-wrap" title={heartbeat.is_healthy ? 'Healthy' : 'Degraded'}>
-    <div class="pulse-dot" class:healthy={heartbeat.is_healthy} class:busy={isBusy}></div>
+  <div class="pulse-wrap" title={heartbeat.is_healthy ? 'Healthy' : 'Ollama offline'}>
+    <div
+      class="pulse-dot"
+      class:healthy={heartbeat.is_healthy && !isBusy}
+      class:busy={heartbeat.is_healthy && isBusy}
+      class:offline={!heartbeat.is_healthy}
+    ></div>
   </div>
 
   <!-- Breadcrumb trail -->
@@ -60,6 +65,10 @@
     transition: background 0.3s;
   }
   .pulse-dot.healthy { background: #22c55e; }
+  .pulse-dot.offline {
+    background: #ef4444;
+    animation: pulse 2s ease-in-out infinite;
+  }
   .pulse-dot.busy {
     background: #facc15;
     animation: pulse 1s ease-in-out infinite;

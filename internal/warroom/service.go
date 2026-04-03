@@ -95,6 +95,24 @@ type WarRoomService struct {
 	activeConvID string
 	heartbeat    HeartbeatState
 	unsub        func()
+
+	// Ollama health monitoring.
+	ollamaHealthy bool        // true when Ollama is reachable
+	healthCancel  context.CancelFunc
+
+	// DM message queue — messages sent while Ollama is offline are held here
+	// and flushed automatically when Ollama comes back online.
+	pendingMu sync.Mutex
+	pendingDMs []pendingDM
+}
+
+// pendingDM holds a DM message that could not be processed because Ollama
+// was offline at the time SendDirectMessage was called.
+type pendingDM struct {
+	agentID   string
+	message   string
+	convID    string
+	projectID string
 }
 
 // New creates a WarRoomService and starts the Dispatcher event bridge.
@@ -117,6 +135,7 @@ func New(
 		cfg:                 cfg,
 		cfgPath:             cfgPath,
 		companyIdentityPath: companyIdentityPath,
+		ollamaHealthy:       true, // optimistic default; corrected by first health check
 		heartbeat: HeartbeatState{
 			IsHealthy:   true,
 			Phase:       "Idle",
@@ -125,7 +144,133 @@ func New(
 		},
 	}
 	s.startEventBridge()
+	s.startHealthMonitor()
 	return s
+}
+
+// startHealthMonitor launches a background goroutine that polls Ollama every
+// 15 seconds and updates agent statuses + heartbeat accordingly.
+func (s *WarRoomService) startHealthMonitor() {
+	if s.orch == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.mu.Lock()
+	s.healthCancel = cancel
+	s.mu.Unlock()
+
+	go func() {
+		// Immediate check so the UI sees the real state on first load.
+		s.checkOllamaHealth(ctx)
+
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.checkOllamaHealth(ctx)
+			}
+		}
+	}()
+}
+
+// checkOllamaHealth probes the Ollama endpoint and, if the health state has
+// changed, updates agent statuses and pushes events to the frontend.
+func (s *WarRoomService) checkOllamaHealth(ctx context.Context) {
+	if s.orch == nil {
+		return
+	}
+	ok := s.orch.OllamaHealthy(ctx)
+
+	s.mu.Lock()
+	wasHealthy := s.ollamaHealthy
+	s.ollamaHealthy = ok
+	if ok {
+		s.heartbeat.IsHealthy = true
+		if s.heartbeat.Phase == "Offline" {
+			s.heartbeat.Phase = "Idle"
+			s.heartbeat.Breadcrumbs = []string{"Idle"}
+		}
+	} else {
+		s.heartbeat.IsHealthy = false
+		s.heartbeat.Phase = "Offline"
+		s.heartbeat.Breadcrumbs = []string{"Ollama offline"}
+	}
+	s.heartbeat.UpdatedAt = time.Now()
+	hbSnapshot := s.heartbeat
+	s.mu.Unlock()
+
+	if wasHealthy == ok {
+		return // no change — nothing to emit
+	}
+
+	// Push updated heartbeat and agent list to the frontend.
+	s.app.Event.Emit("kotui:heartbeat", hbSnapshot)
+	s.emitAgentsChanged(ctx)
+
+	if ok {
+		// Ollama just came back online — flush any queued DM messages.
+		s.flushPendingDMs()
+	}
+}
+
+// emitAgentsChanged fetches the current agent roster and emits it to the frontend.
+func (s *WarRoomService) emitAgentsChanged(ctx context.Context) {
+	agents, err := s.GetAgents(ctx)
+	if err != nil {
+		return
+	}
+	s.app.Event.Emit("kotui:agents", agents)
+}
+
+// flushPendingDMs processes all DM messages that were queued while Ollama was
+// offline, sending each one now that the service is reachable again.
+func (s *WarRoomService) flushPendingDMs() {
+	s.pendingMu.Lock()
+	queue := s.pendingDMs
+	s.pendingDMs = nil
+	s.pendingMu.Unlock()
+
+	if len(queue) == 0 {
+		return
+	}
+
+	for _, dm := range queue {
+		dm := dm
+		go func() {
+			ctx := context.Background()
+
+			// Notify the user that their queued message is now being processed.
+			resumeMsg := models.Message{
+				ProjectID:      dm.projectID,
+				ConversationID: dm.convID,
+				AgentID:        "system",
+				Kind:           models.KindSystemEvent,
+				Tier:           models.TierSummary,
+				Content:        "✅ Agent is back online — sending your queued message now",
+				CreatedAt:      time.Now(),
+			}
+			if s.db != nil {
+				_ = s.db.SaveMessage(ctx, resumeMsg)
+			}
+			s.app.Event.Emit("kotui:message", resumeMsg)
+
+			s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": dm.convID, "busy": true})
+			defer s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": dm.convID, "busy": false})
+
+			onChunk := func(chunk string) {
+				s.app.Event.Emit("kotui:dm_stream", map[string]any{
+					"conversation_id": dm.convID,
+					"chunk":           chunk,
+				})
+			}
+			if err := s.orch.HandleDirectMessage(ctx, dm.agentID, dm.message, dm.convID, onChunk); err != nil {
+				s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+			}
+		}()
+	}
 }
 
 // startEventBridge subscribes to all Dispatcher messages and re-emits them
@@ -164,11 +309,16 @@ func (s *WarRoomService) startEventBridge() {
 	})
 }
 
-// Shutdown stops the event bridge. Called on app teardown.
+// Shutdown stops the event bridge and health monitor. Called on app teardown.
 func (s *WarRoomService) Shutdown() {
 	if s.unsub != nil {
 		s.unsub()
 	}
+	s.mu.Lock()
+	if s.healthCancel != nil {
+		s.healthCancel()
+	}
+	s.mu.Unlock()
 }
 
 // --- Exported methods callable from TypeScript ---------------------------
@@ -330,12 +480,21 @@ func (s *WarRoomService) SendBossCommand(ctx context.Context, command string) er
 
 // GetAgents returns the current agent roster for the active project.
 func (s *WarRoomService) GetAgents(ctx context.Context) ([]AgentInfo, error) {
+	s.mu.RLock()
+	offline := !s.ollamaHealthy
+	s.mu.RUnlock()
+
+	defaultStatus := "idle"
+	if offline {
+		defaultStatus = "offline"
+	}
+
 	// Always include the Lead as a synthetic entry.
 	infos := []AgentInfo{{
 		ID:     "lead",
 		Name:   "Lead",
 		Role:   "lead",
-		Status: "idle",
+		Status: defaultStatus,
 		Model:  "",
 	}}
 	if s.db == nil {
@@ -350,16 +509,20 @@ func (s *WarRoomService) GetAgents(ctx context.Context) ([]AgentInfo, error) {
 		return infos, err
 	}
 	for _, a := range agents {
+		status := string(a.Status)
+		if offline {
+			status = "offline"
+		}
 		if a.ID == "lead" {
 			infos[0].Model = a.Model
-			infos[0].Status = string(a.Status)
+			infos[0].Status = status
 			continue
 		}
 		infos = append(infos, AgentInfo{
 			ID:     a.ID,
 			Name:   a.Name,
 			Role:   string(a.Role),
-			Status: string(a.Status),
+			Status: status,
 			Model:  a.Model,
 		})
 	}
@@ -620,6 +783,37 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 	// Index the message in memory for later recall.
 	if s.mem != nil {
 		s.mem.IndexAsync(ctx, agentID, p.ID, message, true)
+	}
+
+	// If Ollama is offline, queue the message and notify the user.
+	s.mu.RLock()
+	offline := !s.ollamaHealthy
+	s.mu.RUnlock()
+	if offline {
+		s.pendingMu.Lock()
+		s.pendingDMs = append(s.pendingDMs, pendingDM{
+			agentID:   agentID,
+			message:   message,
+			convID:    convID,
+			projectID: p.ID,
+		})
+		queuePos := len(s.pendingDMs)
+		s.pendingMu.Unlock()
+
+		queueMsg := models.Message{
+			ProjectID:      p.ID,
+			ConversationID: convID,
+			AgentID:        "system",
+			Kind:           models.KindSystemEvent,
+			Tier:           models.TierSummary,
+			Content:        fmt.Sprintf("⏳ Agent is offline — message queued (position %d). It will be delivered automatically when the agent comes back online.", queuePos),
+			CreatedAt:      time.Now(),
+		}
+		if s.db != nil {
+			_ = s.db.SaveMessage(ctx, queueMsg)
+		}
+		s.app.Event.Emit("kotui:message", queueMsg)
+		return nil
 	}
 
 	// Call the agent directly in a goroutine — response is dispatched back to

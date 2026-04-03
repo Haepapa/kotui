@@ -123,6 +123,7 @@ type MessageHandler = (msg: KotuiMessage) => void;
 type HeartbeatHandler = (hb: HeartbeatState) => void;
 type ErrorHandler = (err: { error: string }) => void;
 type ApprovalHandler = (approvals: Approval[]) => void;
+type AgentsHandler = (agents: AgentInfo[]) => void;
 
 export function onMessage(handler: MessageHandler): () => void {
   return Events.On('kotui:message', (ev) => handler(ev.data as KotuiMessage));
@@ -138,4 +139,8 @@ export function onError(handler: ErrorHandler): () => void {
 
 export function onApproval(handler: ApprovalHandler): () => void {
   return Events.On('kotui:approval', (ev) => handler(ev.data as Approval[]));
+}
+
+export function onAgents(handler: AgentsHandler): () => void {
+  return Events.On('kotui:agents', (ev) => handler(ev.data as AgentInfo[]));
 }

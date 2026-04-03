@@ -14,6 +14,7 @@ import {
   onHeartbeat,
   onError,
   onApproval,
+  onAgents,
   getPendingApprovals,
   getOrCreateDirectConversation,
   renameProject,
@@ -91,6 +92,7 @@ let unsubMessage: (() => void) | null = null;
 let unsubHeartbeat: (() => void) | null = null;
 let unsubError: (() => void) | null = null;
 let unsubApproval: (() => void) | null = null;
+let unsubAgents: (() => void) | null = null;
 let unsubProjects: (() => void) | null = null;
 let unsubDMBusy: (() => void) | null = null;
 let unsubDMStream: (() => void) | null = null;
@@ -133,6 +135,10 @@ export async function initWarRoom() {
 
   unsubApproval = onApproval((approvals) => {
     wr.approvals = approvals ?? [];
+  });
+
+  unsubAgents = onAgents((agents) => {
+    wr.agents = agents ?? [];
   });
 
   // Refresh project list whenever the backend signals a change.
@@ -197,6 +203,7 @@ export function destroyWarRoom() {
   unsubHeartbeat?.();
   unsubError?.();
   unsubApproval?.();
+  unsubAgents?.();
   unsubProjects?.();
   unsubDMBusy?.();
   unsubDMStream?.();

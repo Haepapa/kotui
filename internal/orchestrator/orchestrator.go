@@ -294,6 +294,12 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 	return nil
 }
 
+// OllamaHealthy reports whether the configured Ollama inference backend is
+// currently reachable. Used by the WarRoomService for agent status management.
+func (o *Orchestrator) OllamaHealthy(ctx context.Context) bool {
+	return o.inferrer.IsHealthy(ctx)
+}
+
 // HandleDirectMessage sends a message directly to a named agent and dispatches
 // the response back to the supplied DM conversation ID.
 //
