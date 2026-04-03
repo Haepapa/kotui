@@ -34,18 +34,20 @@
 
 <aside class="engine-room">
   <div class="er-header">
-    <span class="er-title">Dev Console</span>
+    <span class="er-title">Agent Activity</span>
     <span class="er-count">{messages.length}</span>
   </div>
   <div class="er-console" bind:this={consoleEl}>
     {#each messages as msg (msg.id || msg.created_at)}
       <div class="log-line">
-        <span class="log-time">{formatTime(msg.created_at)}</span>
-        <span class="log-kind" style="color:{kindColour(msg.kind)}">[{msg.kind}]</span>
-        {#if msg.agent_id}
-          <span class="log-agent">{msg.agent_id}</span>
-        {/if}
-        <span class="log-content">{msg.content}</span>
+        <div class="log-meta">
+          <span class="log-time">{formatTime(msg.created_at)}</span>
+          <span class="log-kind" style="color:{kindColour(msg.kind)}">[{msg.kind}]</span>
+          {#if msg.agent_id}
+            <span class="log-agent">{msg.agent_id}</span>
+          {/if}
+        </div>
+        <div class="log-content">{msg.content}</div>
       </div>
     {/each}
     {#if messages.length === 0}
@@ -92,16 +94,22 @@
   .er-console::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
   .log-line {
     display: flex;
-    gap: 0.375rem;
+    flex-direction: column;
+    gap: 0.1rem;
     font-size: 0.75rem;
     line-height: 1.5;
+    padding: 0.2rem 0;
+    border-bottom: 1px solid var(--border-console);
+  }
+  .log-meta {
+    display: flex;
+    gap: 0.375rem;
     align-items: baseline;
-    flex-wrap: wrap;
   }
   .log-time { color: var(--text-muted); white-space: nowrap; }
   .log-kind { font-weight: 600; white-space: nowrap; }
   .log-agent { color: #60a5fa; white-space: nowrap; }
-  .log-content { color: var(--text-secondary); word-break: break-word; flex: 1; min-width: 0; }
+  .log-content { color: var(--text-secondary); word-break: break-word; padding-left: 0.25rem; }
   .er-empty { font-size: 0.75rem; color: var(--text-muted); padding: 1rem; text-align: center; }
 </style>
 

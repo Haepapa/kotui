@@ -70,6 +70,7 @@ export function GetAgents(): $CancellablePromise<$models.AgentInfo[]> {
 
 /**
  * GetCompanyIdentity returns the content of COMPANY_IDENTITY.md.
+ * When the file does not exist or is empty, a starter template is returned.
  */
 export function GetCompanyIdentity(): $CancellablePromise<string> {
     return $Call.ByID(1837997534);

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -704,16 +705,47 @@ func (s *WarRoomService) DeleteOllamaModel(ctx context.Context, endpoint, name s
 }
 
 // GetCompanyIdentity returns the content of COMPANY_IDENTITY.md.
+// When the file does not exist or is empty, a starter template is returned.
 func (s *WarRoomService) GetCompanyIdentity(ctx context.Context) (string, error) {
 	data, err := os.ReadFile(s.companyIdentityPath)
-	if os.IsNotExist(err) {
-		return "", nil
+	if os.IsNotExist(err) || (err == nil && len(strings.TrimSpace(string(data))) == 0) {
+		return companyIdentityTemplate, nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("warroom: read company identity: %w", err)
 	}
 	return string(data), nil
 }
+
+const companyIdentityTemplate = `# Company Identity
+
+## Overview
+<!-- Describe your organisation in 2–3 sentences. What does it do? Who does it serve? -->
+
+## Mission
+<!-- What is the core purpose of your organisation? What problem does it solve? -->
+
+## Values
+<!-- What principles guide your team? -->
+- 
+- 
+- 
+
+## Team Structure
+<!-- How is your team organised? Roles, departments, reporting lines. -->
+
+## Products & Services
+<!-- What does your organisation offer? Brief description of each. -->
+
+## Target Market
+<!-- Who are your customers or stakeholders? What industries or demographics? -->
+
+## Communication Style
+<!-- How does your team communicate internally and externally? Tone, formality, preferred channels. -->
+
+## Current Priorities
+<!-- What is the team focused on right now? Key goals for this period. -->
+`
 
 // SaveCompanyIdentity writes COMPANY_IDENTITY.md and triggers CultureBroadcast.
 func (s *WarRoomService) SaveCompanyIdentity(ctx context.Context, content string) error {
