@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getConfig, saveConfig, listOllamaModels, pullOllamaModel, deleteOllamaModel } from '../lib/warroom';
-  import { switchToChat } from '../stores/warroom.svelte';
+  import { saveAccentColor, currentAccentColor, DEFAULT_ACCENT } from '../lib/theme';
   import type { UIConfig } from '../lib/types';
 
   let cfg = $state<UIConfig>({
@@ -28,6 +28,23 @@
 
   let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
   let errorMsg = $state('');
+
+  // ── Appearance ────────────────────────────────────────────────────────────
+  let accentColor = $state(currentAccentColor());
+
+  const ACCENT_PRESETS = [
+    { label: 'Gold',    hex: '#d4a017' },
+    { label: 'Blue',    hex: '#4f7cf7' },
+    { label: 'Purple',  hex: '#8b5cf6' },
+    { label: 'Green',   hex: '#22c55e' },
+    { label: 'Red',     hex: '#ef4444' },
+    { label: 'Teal',    hex: '#14b8a6' },
+  ];
+
+  function handleAccentChange(hex: string) {
+    accentColor = hex;
+    saveAccentColor(hex);
+  }
 
   // Per-endpoint model state
   type OllamaState = {
@@ -143,6 +160,34 @@
     <h2>Settings</h2>
   </div>
   <div class="settings-body">
+
+    <!-- ── Appearance ────────────────────────────────────────────── -->
+    <section class="settings-section">
+      <div class="section-heading-row">
+        <h3>Appearance</h3>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Accent colour</label>
+        <div class="accent-row">
+          {#each ACCENT_PRESETS as p}
+            <button
+              class="swatch"
+              class:swatch-active={accentColor.toLowerCase() === p.hex.toLowerCase()}
+              style="background:{p.hex}"
+              title={p.label}
+              onclick={() => handleAccentChange(p.hex)}
+            ></button>
+          {/each}
+          <input
+            type="color"
+            class="colour-picker"
+            value={accentColor}
+            title="Custom colour"
+            oninput={(e) => handleAccentChange((e.target as HTMLInputElement).value)}
+          />
+        </div>
+      </div>
+    </section>
 
     <!-- ── Local Ollama ───────────────────────────────────────── -->
     <section class="settings-section">
@@ -562,8 +607,40 @@
   .icon-btn.accent { background: var(--accent-btn); color: #e0e9ff; border-color: var(--accent-btn-hover); }
   .icon-btn.accent:hover:not(:disabled) { background: var(--accent-btn-hover); }
 
+  /* ── Appearance ───────────────────────────────────────────── */
+  .field-group { display: flex; flex-direction: column; gap: 0.375rem; }
+  .field-label { font-size: 0.8125rem; color: var(--text-secondary); font-weight: 500; }
+  .accent-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.12s, border-color 0.12s;
+    flex-shrink: 0;
+  }
+  .swatch:hover { transform: scale(1.18); }
+  .swatch-active { border-color: var(--text-heading) !important; transform: scale(1.15); }
+  .colour-picker {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--border-input);
+    padding: 0;
+    cursor: pointer;
+    background: none;
+    overflow: hidden;
+  }
+  .colour-picker::-webkit-color-swatch-wrapper { padding: 0; }
+  .colour-picker::-webkit-color-swatch { border: none; border-radius: 50%; }
+
   .model-list {
-    border: 1px solid var(--border-subtle);
     border-radius: 8px;
     overflow: hidden;
   }

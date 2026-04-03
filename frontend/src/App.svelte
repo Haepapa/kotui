@@ -16,11 +16,14 @@
     switchToChat,
   } from './stores/warroom.svelte';
 
+  import { loadAccentColor } from './lib/theme';
+
   let theme = $state<'dark' | 'light'>('dark');
 
   onMount(() => {
     const saved = localStorage.getItem('kotui-theme');
     if (saved === 'light') theme = 'light';
+    loadAccentColor();
     initWarRoom();
   });
   onDestroy(destroyWarRoom);
@@ -170,7 +173,7 @@
     width: 32px;
     height: 32px;
     border-radius: 9px;
-    background: linear-gradient(145deg, #4f7cf7 0%, #7c6df7 100%);
+    background: linear-gradient(145deg, var(--logo-grad-start) 0%, var(--logo-grad-end) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
