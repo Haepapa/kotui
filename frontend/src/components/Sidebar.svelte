@@ -39,12 +39,16 @@
   async function handleCreateProject() {
     if (!newName.trim()) return;
     try {
-      await createProject(newName.trim(), newDesc.trim());
-      // Eagerly refresh project list (event from backend also triggers this).
-      wr.projects = (await getProjects()) ?? [];
+      const project = await createProject(newName.trim(), newDesc.trim());
       showNewProject = false;
       newName = '';
       newDesc = '';
+      if (project) {
+        // Backend already switched to the new project; sync frontend state.
+        await handleSwitch(project.id);
+      }
+      // Refresh sidebar list (handleSwitch doesn't update wr.projects).
+      wr.projects = (await getProjects()) ?? [];
     } catch (e) {
       console.error('createProject:', e);
     }
