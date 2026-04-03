@@ -39,6 +39,7 @@
 <div class="editor">
   <div class="editor-header">
     <button class="back-btn" onclick={switchToChat}>← Back</button>
+    <h2>Company Identity</h2>
   </div>
   <div class="editor-body">
     <p class="editor-hint">Edit the company identity document. Saving will reset all agent context (Culture Broadcast).</p>
@@ -95,6 +96,12 @@
     transition: background 0.12s, color 0.12s;
   }
   .back-btn:hover { background: var(--bg-hover); color: var(--text-heading); }
+  h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    margin: 0;
+  }
   .editor-body {
     flex: 1;
     display: flex;
