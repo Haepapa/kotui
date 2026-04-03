@@ -144,12 +144,20 @@ export async function initWarRoom() {
   });
 
   // Refresh project list whenever the backend signals a change.
-  unsubProjects = Events.On('kotui:projects', (event: any) => {
+  unsubProjects = Events.On('kotui:projects', async (event: any) => {
     const projects: Project[] = (event?.data as Project[]) ?? [];
     wr.projects = projects;
     const active = projects.find((p) => p.active);
     if (active && active.id !== wr.activeProjectID) {
+      // Active project changed (e.g. newly created channel, archive fallback).
+      // Fully switch the UI: load the new conv and its messages.
       wr.activeProjectID = active.id;
+      wr.activeView = 'chat';
+      wr.messages = [];
+      wr.activeConvID = (await getActiveConversation()) ?? '';
+      if (wr.activeConvID) {
+        wr.messages = (await getMessages(wr.activeConvID, 200)) ?? [];
+      }
     }
   });
 

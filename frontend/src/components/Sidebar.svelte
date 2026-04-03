@@ -39,16 +39,12 @@
   async function handleCreateProject() {
     if (!newName.trim()) return;
     try {
-      const project = await createProject(newName.trim(), newDesc.trim());
+      await createProject(newName.trim(), newDesc.trim());
+      // The kotui:projects event from the backend handles switching the UI
+      // to the new channel (updating activeProjectID, activeConvID, messages).
       showNewProject = false;
       newName = '';
       newDesc = '';
-      if (project) {
-        // Backend already switched to the new project; sync frontend state.
-        await handleSwitch(project.id);
-      }
-      // Refresh sidebar list (handleSwitch doesn't update wr.projects).
-      wr.projects = (await getProjects()) ?? [];
     } catch (e) {
       console.error('createProject:', e);
     }
