@@ -405,8 +405,8 @@ func (s *WarRoomService) SwitchProject(ctx context.Context, id string) error {
 			return err
 		}
 	}
-	// Retrieve the conversation that SetProject just created.
-	convID, err := s.db.GetLatestConversation(ctx, id)
+	// Retrieve the stable war-room conversation for this project.
+	convID, err := s.db.GetConversationByTitle(ctx, id, "war-room")
 	if err != nil {
 		return err
 	}
@@ -445,7 +445,8 @@ func (s *WarRoomService) GetActiveConversation(ctx context.Context) (string, err
 	if err != nil || p == nil {
 		return "", err
 	}
-	convID, err := s.db.GetLatestConversation(ctx, p.ID)
+	// Look up (or create) the stable war-room conversation.
+	convID, err := s.db.GetOrCreateWarRoomConversation(ctx, p.ID)
 	if err != nil {
 		return "", err
 	}

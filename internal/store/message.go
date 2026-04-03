@@ -151,6 +151,20 @@ func (db *DB) GetDMConversation(ctx context.Context, agentID string) (string, er
 	return id, nil
 }
 
+// GetOrCreateWarRoomConversation returns the ID of the existing war-room
+// conversation for a project, creating one only if none exists.
+// This keeps a stable conversation ID across sessions and channel switches.
+func (db *DB) GetOrCreateWarRoomConversation(ctx context.Context, projectID string) (string, error) {
+	id, err := db.GetConversationByTitle(ctx, projectID, "war-room")
+	if err != nil {
+		return "", err
+	}
+	if id != "" {
+		return id, nil
+	}
+	return db.CreateConversation(ctx, projectID, "war-room")
+}
+
 // GetLatestConversation returns the ID of the most recent conversation for a
 // project. Returns ("", nil) if none exists.
 func (db *DB) GetLatestConversation(ctx context.Context, projectID string) (string, error) {

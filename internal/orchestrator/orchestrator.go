@@ -159,15 +159,17 @@ func New(
 	return o, nil
 }
 
-// SetProject sets the active project ID and creates a conversation record.
+// SetProject sets the active project ID and resolves (or creates) the stable
+// war-room conversation for that project. Reuses an existing conversation so
+// that chat history is preserved across channel switches and app restarts.
 func (o *Orchestrator) SetProject(ctx context.Context, projectID string) error {
 	o.projectID = projectID
 	o.disp.SetProject(projectID)
 
 	if o.db != nil {
-		convID, err := o.db.CreateConversation(ctx, projectID, "war-room")
+		convID, err := o.db.GetOrCreateWarRoomConversation(ctx, projectID)
 		if err != nil {
-			return fmt.Errorf("orchestrator: create conversation: %w", err)
+			return fmt.Errorf("orchestrator: get or create war-room conversation: %w", err)
 		}
 		o.convID = convID
 	}
