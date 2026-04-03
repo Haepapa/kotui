@@ -51,9 +51,15 @@
   }
 
   async function handleSwitch(id: string) {
-    if (id === wr.activeProjectID) return;
-    await switchProject(id);
-    wr.activeProjectID = id;
+    // If the user is already viewing this channel's chat, do nothing.
+    // But if they're in a DM (or other view), clicking the active channel
+    // should still switch back to its chat view.
+    if (id === wr.activeProjectID && wr.activeView === 'chat') return;
+
+    if (id !== wr.activeProjectID) {
+      await switchProject(id);
+      wr.activeProjectID = id;
+    }
     wr.activeView = 'chat';
     wr.messages = [];
     try {
