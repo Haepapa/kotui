@@ -18,7 +18,6 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/haepapa/kotui/internal/agent"
 	"github.com/haepapa/kotui/internal/config"
@@ -175,14 +174,30 @@ func (o *Orchestrator) SetProject(ctx context.Context, projectID string) error {
 	return nil
 }
 
+// channelRawFn returns a function that routes raw activity events to the
+// channel EngineRoom (war-room convID).  Set ra.OnRaw = o.channelRawFn(agentID)
+// before calling Turn/TurnStream on a channel-scoped agent.
+func (o *Orchestrator) channelRawFn(agentID string) func(models.MessageKind, string) {
+	return func(kind models.MessageKind, content string) {
+		o.disp.DispatchRaw(models.Message{
+			ProjectID:      o.projectID,
+			ConversationID: o.convID,
+			AgentID:        agentID,
+			Kind:           kind,
+			Tier:           models.TierRaw,
+			Content:        content,
+		})
+	}
+}
+
 // HandleBossCommand is the main entry point for a Boss instruction.
 // It runs the full Lead → task decomposition → Worker loop.
 func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) error {
 	o.disp.DispatchSummary(models.Message{
-		ProjectID: o.projectID,
+		ProjectID:      o.projectID,
 		ConversationID: o.convID,
-		Kind:      models.KindBossCommand,
-		Tier:      models.TierSummary,
+		Kind:           models.KindBossCommand,
+		Tier:           models.TierSummary,
 		Content:   command,
 	})
 
@@ -197,7 +212,9 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 			augmented = memory.FormatRecall(entries) + "\n\n" + augmented
 		}
 	}
+	o.lead.OnRaw = o.channelRawFn("lead")
 	decomposed, err := o.lead.Turn(ctx, augmented)
+	o.lead.OnRaw = nil
 	if err != nil {
 		var escErr *EscalationNeededError
 		if errors.As(err, &escErr) {
@@ -207,22 +224,23 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 	}
 
 	o.disp.DispatchRaw(models.Message{
-		ProjectID: o.projectID,
-		Kind:      models.KindDraft,
-		Tier:      models.TierRaw,
-		Content:   "Lead plan: " + decomposed,
+		ProjectID:      o.projectID,
+		ConversationID: o.convID,
+		Kind:           models.KindDraft,
+		Tier:           models.TierRaw,
+		Content:        "Lead plan: " + decomposed,
 	})
 
 	tasks := parseTaskList(decomposed)
 	if len(tasks) == 0 {
 		// Lead may have just answered directly (simple tasks).
 		o.disp.DispatchSummary(models.Message{
-			ProjectID: o.projectID,
+			ProjectID:      o.projectID,
 			ConversationID: o.convID,
-			Kind:      models.KindAgentMessage,
-			Tier:      models.TierSummary,
-			AgentID:   "lead",
-			Content:   decomposed,
+			Kind:           models.KindAgentMessage,
+			Tier:           models.TierSummary,
+			AgentID:        "lead",
+			Content:        decomposed,
 		})
 		return nil
 	}
@@ -267,10 +285,11 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 			}
 			o.log.Error("worker task failed", "task", task.ID, "err", workerErr)
 			o.disp.DispatchSummary(models.Message{
-				ProjectID: o.projectID,
-				Kind:      models.KindSystemEvent,
-				Tier:      models.TierSummary,
-				Content:   fmt.Sprintf("⚠️ Task %s failed: %v", task.ID, workerErr),
+				ProjectID:      o.projectID,
+				ConversationID: o.convID,
+				Kind:           models.KindSystemEvent,
+				Tier:           models.TierSummary,
+				Content:        fmt.Sprintf("⚠️ Task %s failed: %v", task.ID, workerErr),
 			})
 		}
 		_ = result
@@ -278,7 +297,9 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 
 	// Step 4: Lead produces final summary milestone.
 	o.leadMu.Lock()
+	o.lead.OnRaw = o.channelRawFn("lead")
 	summary, sumErr := o.lead.Turn(ctx, "All sub-tasks are complete. Provide a brief summary of what was accomplished for the Boss.")
+	o.lead.OnRaw = nil
 	o.leadMu.Unlock()
 	if sumErr == nil {
 		o.disp.DispatchSummary(models.Message{
@@ -356,41 +377,24 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 	}
 	defer o.dmInferenceMu.Unlock()
 
-	// Log the outbound Ollama API call to the dev console.
-	o.disp.Dispatch(models.Message{
-		ProjectID:      o.projectID,
-		ConversationID: convID,
-		AgentID:        agentID,
-		Kind:           models.KindSystemEvent,
-		Tier:           models.TierRaw,
-		Content:        fmt.Sprintf("→ POST /api/chat  model=%s  agent=%s", ra.Model, agentID),
-	})
-
-	start := time.Now()
-	response, err := ra.TurnStream(ctx, augmented, onChunk)
-	elapsed := time.Since(start)
-
-	if err != nil {
+	// Route all raw activity from TurnStream (API calls, tool calls, errors)
+	// to the DM conversation's EngineRoom.
+	ra.OnRaw = func(kind models.MessageKind, content string) {
 		o.disp.Dispatch(models.Message{
 			ProjectID:      o.projectID,
 			ConversationID: convID,
 			AgentID:        agentID,
-			Kind:           models.KindSystemEvent,
+			Kind:           kind,
 			Tier:           models.TierRaw,
-			Content:        fmt.Sprintf("✗ ollama error after %.2fs: %v", elapsed.Seconds(), err),
+			Content:        content,
 		})
+	}
+	defer func() { ra.OnRaw = nil }()
+
+	response, err := ra.TurnStream(ctx, augmented, onChunk)
+	if err != nil {
 		return fmt.Errorf("dm %s: %w", agentID, err)
 	}
-
-	// Log timing to the dev console.
-	o.disp.Dispatch(models.Message{
-		ProjectID:      o.projectID,
-		ConversationID: convID,
-		AgentID:        agentID,
-		Kind:           models.KindSystemEvent,
-		Tier:           models.TierRaw,
-		Content:        fmt.Sprintf("← /api/chat done  %.2fs  agent=%s", elapsed.Seconds(), agentID),
-	})
 
 	// Dispatch the agent reply to the DM conversation (not the war-room convID).
 	o.disp.Dispatch(models.Message{

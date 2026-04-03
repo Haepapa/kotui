@@ -2,8 +2,10 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/haepapa/kotui/internal/mcp"
 	"github.com/haepapa/kotui/internal/ollama"
@@ -25,6 +27,18 @@ type RunningAgent struct {
 	mcpEng    *mcp.Engine
 	history   []ollama.ChatMessage
 	sysPrompt string
+
+	// OnRaw, if non-nil, receives raw activity events (API calls, tool calls,
+	// tool results, errors). Callers set this before calling Turn/TurnStream to
+	// route log entries to the appropriate Dispatcher channel.
+	OnRaw func(kind models.MessageKind, content string)
+}
+
+// rawLog calls OnRaw if set. Safe to call when OnRaw is nil.
+func (ra *RunningAgent) rawLog(kind models.MessageKind, content string) {
+	if ra.OnRaw != nil {
+		ra.OnRaw(kind, content)
+	}
 }
 
 // newRunningAgent creates a RunningAgent from a spawned agent.Agent.
@@ -66,14 +80,19 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 	for loop := 0; loop < maxToolLoops; loop++ {
 		msgs := ra.buildMessages()
 
+		ra.rawLog(models.KindSystemEvent, fmt.Sprintf("→ POST /api/chat  model=%s  agent=%s", ra.Model, ra.AgentName))
+		start := time.Now()
 		result, err := ra.inferrer.Chat(ctx, ollama.ChatRequest{
 			Model:     ra.Model,
 			Messages:  msgs,
 			KeepAlive: ra.KeepAlive,
 		})
+		elapsed := time.Since(start)
 		if err != nil {
+			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("✗ ollama error after %.2fs: %v", elapsed.Seconds(), err))
 			return "", fmt.Errorf("agent %s: inference: %w", ra.AgentName, err)
 		}
+		ra.rawLog(models.KindSystemEvent, fmt.Sprintf("← /api/chat done  %.2fs  agent=%s", elapsed.Seconds(), ra.AgentName))
 
 		response := result.Content
 
@@ -101,8 +120,16 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 		// Assign a stable ID for tracing.
 		toolCall.ID = fmt.Sprintf("%s-loop%d", ra.AgentID, loop)
 
+		ra.rawLog(models.KindToolCall, fmt.Sprintf("→ tool: %s  args=%s", toolCall.ToolName, fmtArgs(toolCall.Args)))
+
 		// Execute the tool.
 		toolResult, execErr := ra.mcpEng.Execute(ctx, ra.Clearance, *toolCall)
+
+		if execErr != nil {
+			ra.rawLog(models.KindToolResult, fmt.Sprintf("← tool %s error: %v", toolCall.ToolName, execErr))
+		} else {
+			ra.rawLog(models.KindToolResult, fmt.Sprintf("← tool %s: %s", toolCall.ToolName, truncate(toolResult.Output, 300)))
+		}
 
 		// Append the assistant's tool-call message.
 		ra.history = append(ra.history, ollama.ChatMessage{
@@ -139,12 +166,16 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 	for loop := 0; loop < maxToolLoops; loop++ {
 		msgs := ra.buildMessages()
 
+		ra.rawLog(models.KindSystemEvent, fmt.Sprintf("→ POST /api/chat  model=%s  agent=%s", ra.Model, ra.AgentName))
+		start := time.Now()
 		ch, err := ra.inferrer.ChatStream(ctx, ollama.ChatRequest{
 			Model:     ra.Model,
 			Messages:  msgs,
 			KeepAlive: ra.KeepAlive,
 		})
 		if err != nil {
+			elapsed := time.Since(start)
+			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("✗ ollama error after %.2fs: %v", elapsed.Seconds(), err))
 			return "", fmt.Errorf("agent %s: inference: %w", ra.AgentName, err)
 		}
 
@@ -161,10 +192,13 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 				break
 			}
 		}
+		elapsed := time.Since(start)
 		response := sb.String()
 		if response == "" {
+			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("✗ empty response after %.2fs  agent=%s", elapsed.Seconds(), ra.AgentName))
 			return "", fmt.Errorf("agent %s: empty response from model", ra.AgentName)
 		}
+		ra.rawLog(models.KindSystemEvent, fmt.Sprintf("← /api/chat done  %.2fs  agent=%s", elapsed.Seconds(), ra.AgentName))
 
 		if sig := parseEscalation(response); sig != nil {
 			return "", &EscalationNeededError{
@@ -185,7 +219,16 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 		}
 
 		toolCall.ID = fmt.Sprintf("%s-loop%d", ra.AgentID, loop)
+
+		ra.rawLog(models.KindToolCall, fmt.Sprintf("→ tool: %s  args=%s", toolCall.ToolName, fmtArgs(toolCall.Args)))
+
 		toolResult, execErr := ra.mcpEng.Execute(ctx, ra.Clearance, *toolCall)
+
+		if execErr != nil {
+			ra.rawLog(models.KindToolResult, fmt.Sprintf("← tool %s error: %v", toolCall.ToolName, execErr))
+		} else {
+			ra.rawLog(models.KindToolResult, fmt.Sprintf("← tool %s: %s", toolCall.ToolName, truncate(toolResult.Output, 300)))
+		}
 
 		ra.history = append(ra.history, ollama.ChatMessage{
 			Role:    "assistant",
@@ -237,6 +280,23 @@ func (ra *RunningAgent) buildMessages() []ollama.ChatMessage {
 	}
 	msgs = append(msgs, ra.history...)
 	return msgs
+}
+
+// fmtArgs renders tool call arguments as compact JSON for the dev console.
+// Falls back to fmt.Sprint if JSON encoding fails.
+func fmtArgs(args map[string]any) string {
+	if len(args) == 0 {
+		return "{}"
+	}
+	b, err := json.Marshal(args)
+	if err != nil {
+		return fmt.Sprint(args)
+	}
+	s := string(b)
+	if len(s) > 200 {
+		s = s[:197] + "..."
+	}
+	return s
 }
 
 // EscalationNeededError is returned by Turn() when the agent signals it

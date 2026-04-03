@@ -69,6 +69,21 @@ func spawnWorker(
 	return ra, spawnedAgent, nil
 }
 
+// makeRawFn returns an OnRaw callback that routes raw activity events to the
+// specified conversation's EngineRoom via the Dispatcher.
+func makeRawFn(disp *dispatcher.Dispatcher, projectID, convID, agentID string) func(models.MessageKind, string) {
+	return func(kind models.MessageKind, content string) {
+		disp.DispatchRaw(models.Message{
+			ProjectID:      projectID,
+			ConversationID: convID,
+			AgentID:        agentID,
+			Kind:           kind,
+			Tier:           models.TierRaw,
+			Content:        content,
+		})
+	}
+}
+
 // runWorkerTask runs a single Worker task with Lead verification.
 // It loops up to verifyMaxRetries times if the Lead rejects the output.
 func runWorkerTask(
@@ -97,10 +112,11 @@ func runWorkerTask(
 	}
 
 	disp.DispatchRaw(models.Message{
-		ProjectID: job.ProjectID,
-		Kind:      models.KindSystemEvent,
-		Tier:      models.TierRaw,
-		Content:   fmt.Sprintf("[Worker] starting task %s", job.TaskID),
+		ProjectID:      job.ProjectID,
+		ConversationID: job.ConvID,
+		Kind:           models.KindSystemEvent,
+		Tier:           models.TierRaw,
+		Content:        fmt.Sprintf("[Worker] starting task %s", job.TaskID),
 	})
 
 	// Recall relevant memories for this worker.
@@ -123,8 +139,13 @@ func runWorkerTask(
 			return WorkerResult{TaskID: job.TaskID, IsError: true}, err
 		}
 
+		// Route raw activity (API calls, tool calls) to the channel EngineRoom.
+		workerRA.OnRaw = makeRawFn(disp, job.ProjectID, job.ConvID, workerRA.AgentID)
+		lead.OnRaw = makeRawFn(disp, job.ProjectID, job.ConvID, "lead")
+
 		// Worker executes.
 		output, err := workerRA.Turn(ctx, job.Instruction)
+		lead.OnRaw = nil
 		if err != nil {
 			// Teardown with failure journal.
 			workerAgent.Teardown(agent.JournalEntry{
@@ -137,11 +158,12 @@ func runWorkerTask(
 
 		// Post draft (raw tier, not visible to Boss).
 		disp.DispatchRaw(models.Message{
-			ProjectID: job.ProjectID,
-			Kind:      models.KindDraft,
-			Tier:      models.TierRaw,
-			AgentID:   workerRA.AgentID,
-			Content:   output,
+			ProjectID:      job.ProjectID,
+			ConversationID: job.ConvID,
+			Kind:           models.KindDraft,
+			Tier:           models.TierRaw,
+			AgentID:        workerRA.AgentID,
+			Content:        output,
 		})
 
 		// Lead verifies (if in swap mode, Lead reloads now).
@@ -151,7 +173,9 @@ func runWorkerTask(
 				"- CORRECTION: <instruction> — if the output needs revision\n\n"+
 				"Worker output:\n%s", job.Instruction, output)
 
+		lead.OnRaw = makeRawFn(disp, job.ProjectID, job.ConvID, "lead")
 		verdict, verifyErr := lead.Turn(ctx, verifyInstruction)
+		lead.OnRaw = nil
 		journalEntry := agent.JournalEntry{
 			Task:    job.Instruction,
 			Outcome: "success",
@@ -178,10 +202,11 @@ func runWorkerTask(
 				_ = db.UpdateTaskStatus(ctx, job.TaskID, "done")
 			}
 			disp.DispatchSummary(models.Message{
-				ProjectID: job.ProjectID,
-				Kind:      models.KindMilestone,
-				Tier:      models.TierSummary,
-				Content:   fmt.Sprintf("✓ Task completed: %s", job.TaskID),
+				ProjectID:      job.ProjectID,
+				ConversationID: job.ConvID,
+				Kind:           models.KindMilestone,
+				Tier:           models.TierSummary,
+				Content:        fmt.Sprintf("✓ Task completed: %s", job.TaskID),
 			})
 			return WorkerResult{TaskID: job.TaskID, Output: output}, nil
 		}
