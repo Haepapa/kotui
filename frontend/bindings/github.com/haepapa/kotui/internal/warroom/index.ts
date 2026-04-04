@@ -8,6 +8,8 @@ export {
 
 export {
     AgentInfo,
+    BrainFiles,
+    FirstRunResult,
     HeartbeatState,
     UIConfig
 } from "./models.js";

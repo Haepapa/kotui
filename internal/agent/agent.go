@@ -67,7 +67,7 @@ func Spawn(cfg SpawnConfig) (*Agent, error) {
 		spawnedAt: time.Now(),
 	}
 
-	prompt, err := compose(paths, cfg.CompanyIdentityPath, cfg.MCPFragment, cfg.PastExperience)
+	prompt, err := compose(paths, cfg.ID, cfg.CompanyIdentityPath, cfg.MCPFragment, cfg.PastExperience)
 	if err != nil {
 		return nil, fmt.Errorf("agent.Spawn: compose prompt for %s: %w", cfg.ID, err)
 	}
@@ -90,7 +90,7 @@ func (a *Agent) Clearance() models.Clearance { return RoleClearance(a.Role) }
 // not a patch — LLMs must receive the new system prompt on the next turn.
 // companyIdentityPath must point to the updated COMPANY_IDENTITY.md.
 func (a *Agent) CultureUpdate(companyIdentityPath, mcpFragment string) error {
-	prompt, err := compose(a.paths, companyIdentityPath, mcpFragment, "")
+	prompt, err := compose(a.paths, a.ID, companyIdentityPath, mcpFragment, "")
 	if err != nil {
 		return fmt.Errorf("agent.CultureUpdate %s: %w", a.ID, err)
 	}

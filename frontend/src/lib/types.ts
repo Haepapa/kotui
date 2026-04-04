@@ -84,4 +84,4 @@ export interface UIConfig {
   webhook_port: number;
 }
 
-export type AppView = 'chat' | 'settings' | 'identity' | 'dm';
+export type AppView = 'chat' | 'settings' | 'identity' | 'dm' | 'brain';

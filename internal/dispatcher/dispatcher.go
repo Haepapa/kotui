@@ -10,11 +10,28 @@
 package dispatcher
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/haepapa/kotui/pkg/models"
 )
+
+// newID generates a random UUID-like identifier (same format as store.NewID).
+func newID() string {
+	b := make([]byte, 16)
+	rand.Read(b) //nolint:errcheck
+	return fmt.Sprintf("%s-%s-%s-%s-%s",
+		hex.EncodeToString(b[0:4]),
+		hex.EncodeToString(b[4:6]),
+		hex.EncodeToString(b[6:8]),
+		hex.EncodeToString(b[8:10]),
+		hex.EncodeToString(b[10:16]),
+	)
+}
 
 // Handler is a function that receives a dispatched message.
 type Handler func(models.Message)
@@ -56,11 +73,20 @@ func (d *Dispatcher) Subscribe(tier models.LogTier, h Handler) func() {
 	}
 }
 
-// Dispatch tags the message with the active project ID (if not already set),
-// then fans it out to all matching subscribers.
+// Dispatch tags the message with the active project ID and ensures it has a
+// stable ID and timestamp before fanning it out to all matching subscribers.
+// Stamping here means both the StorePersister (DB) and the event bridge
+// (frontend Wails event) see the same ID, preventing key collisions in the
+// Svelte {#each} loop that caused channel messages to vanish.
 func (d *Dispatcher) Dispatch(msg models.Message) {
 	if msg.ProjectID == "" {
 		msg.ProjectID = d.ProjectID()
+	}
+	if msg.ID == "" {
+		msg.ID = newID()
+	}
+	if msg.CreatedAt.IsZero() {
+		msg.CreatedAt = time.Now()
 	}
 
 	d.mu.RLock()

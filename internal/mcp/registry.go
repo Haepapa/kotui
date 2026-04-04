@@ -75,13 +75,18 @@ func (r *Registry) systemPromptFragment(c models.Clearance) string {
 	}
 	var sb strings.Builder
 	sb.WriteString("## Available Tools\n\n")
-	sb.WriteString("Call tools by responding with a JSON object on its own line:\n")
-	sb.WriteString("```json\n{\"tool\": \"<name>\", \"args\": {<args>}}\n```\n\n")
+	sb.WriteString("To call a tool, output **exactly this JSON on a single line** (no other text on that line):\n\n")
+	sb.WriteString("```\n{\"tool\": \"tool_name\", \"args\": {\"param1\": \"value1\", \"param2\": \"value2\"}}\n```\n\n")
+	sb.WriteString("**Rules:**\n")
+	sb.WriteString("- The entire tool call MUST be on ONE line. Never split it across multiple lines.\n")
+	sb.WriteString("- Always include both `\"tool\"` and `\"args\"` keys.\n")
+	sb.WriteString("- After the tool result is returned, continue your response naturally.\n")
+	sb.WriteString("- Do NOT output the schema or parameter names as top-level JSON — that is not a tool call.\n\n")
 	for _, t := range tools {
 		sb.WriteString(fmt.Sprintf("### `%s` (clearance: %s)\n", t.Name, t.Clearance.String()))
 		sb.WriteString(t.Description + "\n")
 		if len(t.Schema) > 0 {
-			sb.WriteString("\nSchema:\n```json\n")
+			sb.WriteString("\nParameters:\n```json\n")
 			sb.Write(t.Schema)
 			sb.WriteString("\n```\n")
 		}

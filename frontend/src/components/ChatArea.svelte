@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { KotuiMessage, ViewMode, HeartbeatState } from '../lib/types';
   import { sendBossCommand, sendDirectMessage } from '../lib/warroom';
-  import { wr } from '../stores/warroom.svelte';
+  import { wr, agentName } from '../stores/warroom.svelte';
 
   interface Props {
     messages: KotuiMessage[];
@@ -19,6 +19,7 @@
   let sendError = $state('');
   let scrollEl = $state<HTMLDivElement | null>(null);
   let inputEl = $state<HTMLTextAreaElement | null>(null);
+  let copiedKey = $state('');
 
   $effect(() => {
     // Auto-scroll to bottom when messages change
@@ -98,8 +99,7 @@
 
   function senderName(msg: KotuiMessage): string {
     if (msg.kind === 'boss_command') return 'You';
-    if (msg.agent_id === 'lead') return 'Lead';
-    if (msg.agent_id) return msg.agent_id;
+    if (msg.agent_id) return agentName(msg.agent_id);
     return 'System';
   }
 
@@ -134,19 +134,38 @@
   const statusLabel = $derived(
     isBusy ? heartbeat.breadcrumbs.at(-1) ?? 'Working…' : 'Online'
   );
+
+  function copyText(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      copiedKey = key;
+      setTimeout(() => { if (copiedKey === key) copiedKey = ''; }, 1500);
+    });
+  }
 </script>
 
 <div class="chat-area">
   <!-- Message list -->
   <div class="messages" bind:this={scrollEl}>
     {#if messages.length === 0}
-      <div class="empty">
-        <div class="empty-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      {#if !isDM && !wr.activeProjectID}
+        <!-- First-run: no project exists yet — guide the user to the Lead Agent -->
+        <div class="empty">
+          <div class="empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.35"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <p class="empty-title">Welcome to Kōtui</p>
+          <p class="empty-sub">Click <strong>Lead</strong> in the sidebar to meet your Lead Agent.<br>Introduce yourself and give them a name, personality, and skills.</p>
         </div>
-        <p class="empty-title">No messages yet</p>
-        <p class="empty-sub">Type a message below to get started.</p>
-      </div>
+      {:else}
+        <!-- Channel exists but no messages yet -->
+        <div class="empty">
+          <div class="empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <p class="empty-title">No messages yet</p>
+          <p class="empty-sub">{isDM ? 'Start the conversation below.' : 'Type a message below to get started.'}</p>
+        </div>
+      {/if}
     {/if}
 
     {#each messages as msg (msg.id || msg.created_at)}
@@ -162,11 +181,23 @@
         <!-- Milestone — centred pill -->
         <div class="milestone">
           <span class="milestone-text">{msg.content}</span>
+          <button class="copy-btn" onclick={() => copyText(msg.id || msg.created_at, msg.content)}
+            title="Copy">
+            {#if copiedKey === (msg.id || msg.created_at)}✓{:else}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            {/if}
+          </button>
         </div>
       {:else if msg.kind === 'system_event'}
         <!-- System event — subtle centred line -->
         <div class="system-event">
           <span class="system-event-text">{msg.content}</span>
+          <button class="copy-btn" onclick={() => copyText(msg.id || msg.created_at, msg.content)}
+            title="Copy">
+            {#if copiedKey === (msg.id || msg.created_at)}✓{:else}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            {/if}
+          </button>
         </div>
       {:else}
         <!-- Agent bubble — left aligned -->
@@ -190,13 +221,16 @@
       {/if}
     {/each}
 
-    <!-- Streaming bubble (DM only) — live token preview while agent is responding -->
-    {#if streamContent && isDM}
+    <!-- Streaming bubble — live token preview while agent is responding (channel and DM) -->
+    {#if streamContent}
+      {@const streamAgentName = isDM ? agentName(dmAgentID) : agentName('lead')}
       <div class="row row-agent">
-        <div class="avatar" title={dmAgentID}>{avatarInitials(dmAgentID || 'Agent')}</div>
+        <div class="avatar" title={streamAgentName}>
+          {avatarInitials(streamAgentName || 'A')}
+        </div>
         <div class="agent-bubble-wrap">
           <div class="bubble-meta">
-            <span class="bubble-sender">{dmAgentID || 'Agent'}</span>
+            <span class="bubble-sender">{streamAgentName}</span>
             <span class="streaming-badge">streaming…</span>
           </div>
           {#if streamParsed.thinking}
@@ -218,10 +252,11 @@
       </div>
     {:else if isBusy}
       <!-- Typing indicator — shown when busy but no stream content yet -->
+      {@const busyAgentName = isDM ? agentName(dmAgentID) : agentName('lead')}
       <div class="row row-agent">
-        <div class="avatar">{isDM ? avatarInitials(dmAgentID || 'A') : 'L'}</div>
+        <div class="avatar">{avatarInitials(busyAgentName || 'A')}</div>
         <div class="agent-bubble-wrap">
-          <div class="bubble-meta"><span class="bubble-sender">{isDM ? (dmAgentID || 'Agent') : 'Lead'}</span></div>
+          <div class="bubble-meta"><span class="bubble-sender">{busyAgentName}</span></div>
           <div class="bubble bubble-agent typing">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           </div>
@@ -239,7 +274,15 @@
   <!-- Input -->
   <div class="composer">
     {#if sendError}
-      <div class="send-error">{sendError}</div>
+      <div class="send-error">
+        <span>{sendError}</span>
+        <button class="copy-btn copy-btn-error" onclick={() => copyText('send-error', sendError)}
+          title="Copy error">
+          {#if copiedKey === 'send-error'}✓{:else}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          {/if}
+        </button>
+      </div>
     {/if}
     <div class="composer-box">
       <textarea
@@ -306,7 +349,8 @@
   }
   .empty-icon { margin-bottom: 0.25rem; }
   .empty-title { font-size: 0.9375rem; font-weight: 500; color: var(--text-secondary); }
-  .empty-sub { font-size: 0.8125rem; }
+  .empty-sub { font-size: 0.8125rem; text-align: center; line-height: 1.6; }
+  .empty-sub strong { color: var(--text-secondary); font-weight: 600; }
 
   /* Message rows */
   .row {
@@ -418,6 +462,9 @@
   .milestone {
     align-self: center;
     margin: 0.5rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
   }
   .milestone-text {
     font-size: 0.875rem;
@@ -430,11 +477,39 @@
   .system-event {
     align-self: center;
     margin: 0.25rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
   }
   .system-event-text {
     font-size: 0.8125rem;
     color: var(--text-muted);
   }
+
+  .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+    padding: 2px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .milestone:hover .copy-btn,
+  .system-event:hover .copy-btn,
+  .send-error:hover .copy-btn {
+    opacity: 1;
+  }
+  .copy-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+  .copy-btn-error { color: #f87171; }
+  .copy-btn-error:hover { color: #fca5a5; background: rgba(248,113,113,0.12); }
 
   /* Streaming badge */
   .streaming-badge {
@@ -549,10 +624,14 @@
     flex-shrink: 0;
   }
   .send-error {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
     font-size: 0.75rem;
     color: #f87171;
     padding: 0.25rem 0.125rem 0.375rem;
   }
+  .send-error span { flex: 1; }
   .composer-box {
     display: flex;
     align-items: flex-end;

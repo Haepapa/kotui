@@ -23,12 +23,14 @@ type TaskItem struct {
 	Assignee    string `json:"assignee"` // "lead" | "specialist"
 }
 
-// parseToolCall scans text for the first line containing a valid MCP tool call:
+// parseToolCall scans text for a valid MCP tool call in the format:
 //
 //	{"tool": "name", "args": {...}}
 //
+// The call may be on a single line OR inside a fenced ```json block.
 // Returns nil if no tool call is found.
 func parseToolCall(text string) *models.ToolCall {
+	// First pass: look for a single-line tool call anywhere in the text.
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "{") {
@@ -52,7 +54,78 @@ func parseToolCall(text string) *models.ToolCall {
 			Args:     raw.Args,
 		}
 	}
+
+	// Second pass: try to find a JSON block inside a ```json ... ``` fence or
+	// any multi-line block that begins with { and ends with }.
+	// This handles the case where the model formats the tool call across lines.
+	if tc := parseToolCallFromBlock(text); tc != nil {
+		return tc
+	}
+
 	return nil
+}
+
+// parseToolCallFromBlock tries to extract a tool call from a multi-line JSON
+// block. Handles ```json fences and bare { ... } blocks.
+func parseToolCallFromBlock(text string) *models.ToolCall {
+	// Strip ```json fences if present.
+	stripped := text
+	if idx := strings.Index(text, "```"); idx >= 0 {
+		end := strings.Index(text[idx+3:], "```")
+		if end >= 0 {
+			block := text[idx+3 : idx+3+end]
+			// Remove language tag (e.g. "json\n")
+			if nl := strings.Index(block, "\n"); nl >= 0 {
+				block = block[nl+1:]
+			}
+			stripped = strings.TrimSpace(block)
+		}
+	}
+
+	// Find the outermost { ... } span and try to parse as tool call.
+	start := strings.Index(stripped, "{")
+	if start < 0 {
+		return nil
+	}
+	// Walk forward counting brace depth to find the matching close.
+	depth := 0
+	end := -1
+	for i := start; i < len(stripped); i++ {
+		switch stripped[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				end = i
+			}
+		}
+		if end >= 0 {
+			break
+		}
+	}
+	if end < 0 {
+		return nil
+	}
+
+	candidate := strings.ReplaceAll(stripped[start:end+1], "\n", " ")
+	var raw struct {
+		Tool string         `json:"tool"`
+		Args map[string]any `json:"args"`
+	}
+	if err := json.Unmarshal([]byte(candidate), &raw); err != nil {
+		return nil
+	}
+	if raw.Tool == "" {
+		return nil
+	}
+	if raw.Args == nil {
+		raw.Args = map[string]any{}
+	}
+	return &models.ToolCall{
+		ToolName: raw.Tool,
+		Args:     raw.Args,
+	}
 }
 
 // parseEscalation scans text for the escalation_needed signal defined in

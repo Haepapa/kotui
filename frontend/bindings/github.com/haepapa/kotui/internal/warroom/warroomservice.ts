@@ -53,6 +53,16 @@ export function DeleteOllamaModel(endpoint: string, name: string): $CancellableP
 }
 
 /**
+ * EmitBrainUpdate records a system_event in the agent's DM conversation and
+ * fires a kotui:brain_update event so the frontend can update the unread badge.
+ * Called both from SaveAgentBrainFile (user-initiated) and from the update_self
+ * MCP tool callback (agent-initiated).
+ */
+export function EmitBrainUpdate(agentID: string, file: string, summary: string): $CancellablePromise<void> {
+    return $Call.ByID(2104978325, agentID, file, summary);
+}
+
+/**
  * GetActiveConversation returns the conversation ID for the active project.
  */
 export function GetActiveConversation(): $CancellablePromise<string> {
@@ -60,11 +70,20 @@ export function GetActiveConversation(): $CancellablePromise<string> {
 }
 
 /**
+ * GetAgentBrainFiles reads the three editable brain files for the given agent.
+ */
+export function GetAgentBrainFiles(agentID: string): $CancellablePromise<$models.BrainFiles> {
+    return $Call.ByID(3948791757, agentID).then(($result: any) => {
+        return $$createType2($result);
+    });
+}
+
+/**
  * GetAgents returns the current agent roster for the active project.
  */
 export function GetAgents(): $CancellablePromise<$models.AgentInfo[]> {
     return $Call.ByID(1767502295).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -81,7 +100,7 @@ export function GetCompanyIdentity(): $CancellablePromise<string> {
  */
 export function GetConfig(): $CancellablePromise<$models.UIConfig> {
     return $Call.ByID(3551944047).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -90,7 +109,7 @@ export function GetConfig(): $CancellablePromise<$models.UIConfig> {
  */
 export function GetHeartbeat(): $CancellablePromise<$models.HeartbeatState> {
     return $Call.ByID(3900598671).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -100,7 +119,7 @@ export function GetHeartbeat(): $CancellablePromise<$models.HeartbeatState> {
  */
 export function GetMessages(conversationID: string, limit: number): $CancellablePromise<models$0.Message[]> {
     return $Call.ByID(2715906237, conversationID, limit).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType8($result);
     });
 }
 
@@ -120,7 +139,7 @@ export function GetOrCreateDirectConversation(agentID: string): $CancellableProm
  */
 export function GetPendingApprovals(): $CancellablePromise<models$0.Approval[]> {
     return $Call.ByID(2250532500).then(($result: any) => {
-        return $$createType9($result);
+        return $$createType10($result);
     });
 }
 
@@ -129,7 +148,19 @@ export function GetPendingApprovals(): $CancellablePromise<models$0.Approval[]> 
  */
 export function GetProjects(): $CancellablePromise<models$0.Project[]> {
     return $Call.ByID(634004591).then(($result: any) => {
-        return $$createType10($result);
+        return $$createType11($result);
+    });
+}
+
+/**
+ * InitFirstRun checks whether the app has been used before.
+ * On a fresh install (no projects exist) it creates a default "General" project,
+ * opens a Lead DM conversation, and saves a welcome greeting so the user has an
+ * immediate call to action in the sidebar. Subsequent calls are no-ops.
+ */
+export function InitFirstRun(): $CancellablePromise<$models.FirstRunResult> {
+    return $Call.ByID(787017174).then(($result: any) => {
+        return $$createType12($result);
     });
 }
 
@@ -140,7 +171,7 @@ export function GetProjects(): $CancellablePromise<models$0.Project[]> {
  */
 export function ListOllamaModels(endpoint: string): $CancellablePromise<string[]> {
     return $Call.ByID(637971051, endpoint).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType13($result);
     });
 }
 
@@ -161,6 +192,25 @@ export function RenameProject(id: string, name: string, description: string): $C
 }
 
 /**
+ * ResetAppData wipes all user data and resets the configuration to defaults.
+ * This deletes all chat history, projects, agents, agent identity files, and
+ * resets config.toml. The caller must restart (or reload) the app afterwards.
+ */
+export function ResetAppData(): $CancellablePromise<void> {
+    return $Call.ByID(4104306593);
+}
+
+/**
+ * SaveAgentBrainFile writes one brain file (soul, persona, or skills) for the
+ * given agent, then recomposes instruction.md and invalidates the DM agent
+ * cache so the next message picks up the updated prompt.
+ * summary is a short human-readable description of the change shown in the DM.
+ */
+export function SaveAgentBrainFile(agentID: string, fileKey: string, content: string, summary: string): $CancellablePromise<void> {
+    return $Call.ByID(2159223175, agentID, fileKey, content, summary);
+}
+
+/**
  * SaveCompanyIdentity writes COMPANY_IDENTITY.md and triggers CultureBroadcast.
  */
 export function SaveCompanyIdentity(content: string): $CancellablePromise<void> {
@@ -178,6 +228,8 @@ export function SaveConfig(uiCfg: $models.UIConfig): $CancellablePromise<void> {
 /**
  * SendBossCommand enqueues a Boss instruction to the Orchestrator.
  * Returns immediately; responses arrive via kotui:message events.
+ * Token chunks are streamed to the frontend via kotui:channel_stream so the
+ * channel chat has the same live typing effect as DM conversations.
  */
 export function SendBossCommand(command: string): $CancellablePromise<void> {
     return $Call.ByID(3294220229, command);
@@ -208,13 +260,15 @@ export function SwitchProject(id: string): $CancellablePromise<void> {
 // Private type creation functions
 const $$createType0 = models$0.Project.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = $models.AgentInfo.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.UIConfig.createFrom;
-const $$createType5 = $models.HeartbeatState.createFrom;
-const $$createType6 = models$0.Message.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = models$0.Approval.createFrom;
-const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = $Create.Array($$createType0);
-const $$createType11 = $Create.Array($Create.Any);
+const $$createType2 = $models.BrainFiles.createFrom;
+const $$createType3 = $models.AgentInfo.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $models.UIConfig.createFrom;
+const $$createType6 = $models.HeartbeatState.createFrom;
+const $$createType7 = models$0.Message.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = models$0.Approval.createFrom;
+const $$createType10 = $Create.Array($$createType9);
+const $$createType11 = $Create.Array($$createType0);
+const $$createType12 = $models.FirstRunResult.createFrom;
+const $$createType13 = $Create.Array($Create.Any);

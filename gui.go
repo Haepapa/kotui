@@ -37,6 +37,10 @@ func runGUI(cfg config.Config, db *store.DB) {
 		memStore = memory.New(db, ollamaClient, cfg.Models.Embedder, slog.Default())
 	}
 
+	// brainUpdateFn is set after svc is created; the orchestrator's update_self
+	// MCP tool calls back through this closure to notify the service.
+	var brainUpdateFn func(agentID, file, summary string)
+
 	orchCfg := orchestrator.OrchestratorConfig{
 		LeadModel:           cfg.Models.Lead,
 		WorkerModel:         cfg.Models.Specialist,
@@ -45,6 +49,11 @@ func runGUI(cfg config.Config, db *store.DB) {
 		SandboxRoot:         filepath.Join(cfg.App.DataDir, "sandbox"),
 		CompanyIdentityPath: "COMPANY_IDENTITY.md",
 		AppConfig:           cfg,
+		OnBrainUpdate: func(agentID, file, summary string) {
+			if brainUpdateFn != nil {
+				brainUpdateFn(agentID, file, summary)
+			}
+		},
 	}
 	orch, orchErr := orchestrator.New(orchCfg, orchestrator.NewClientAdapter(ollamaClient), disp, db, slog.Default())
 	if orchErr != nil {
@@ -91,6 +100,10 @@ func runGUI(cfg config.Config, db *store.DB) {
 	})
 
 	wrService := warroom.New(app, db, orch, disp, cfg, config.ConfigPath(), "COMPANY_IDENTITY.md", memStore)
+	// Wire the brain-update callback now that the service is available.
+	brainUpdateFn = func(agentID, file, summary string) {
+		wrService.EmitBrainUpdate(context.Background(), agentID, file, summary)
+	}
 	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
 		Name: "WarRoom",
 	}))

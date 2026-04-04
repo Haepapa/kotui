@@ -56,12 +56,16 @@
     // should still switch back to its chat view.
     if (id === wr.activeProjectID && wr.activeView === 'chat') return;
 
+    // Clear channel unread when switching to it.
+    wr.unreadChannel[id] = 0;
+
     if (id !== wr.activeProjectID) {
       await switchProject(id);
       wr.activeProjectID = id;
     }
     wr.activeView = 'chat';
     wr.messages = [];
+    wr.channelStream = '';
     try {
       wr.activeConvID = (await getActiveConversation()) ?? '';
       if (wr.activeConvID) {
@@ -144,18 +148,21 @@
             </div>
           </div>
         {:else}
-          <div class="nav-item-wrap" class:active={wr.activeView !== 'dm' && p.id === wr.activeProjectID}>
+          <div class="nav-item-wrap" class:active={wr.activeView === 'chat' && p.id === wr.activeProjectID}>
             <button
               class="nav-item"
-              class:active={wr.activeView !== 'dm' && p.id === wr.activeProjectID}
+              class:active={wr.activeView === 'chat' && p.id === wr.activeProjectID}
               onclick={() => handleSwitch(p.id)}
               title={p.description || p.name}
             >
-              {#if wr.activeView !== 'dm' && p.id === wr.activeProjectID}
+              {#if wr.activeView === 'chat' && p.id === wr.activeProjectID}
                 <span class="active-pip"></span>
               {/if}
               <span class="nav-hash">#</span>
               <span class="nav-item-text">{p.name}</span>
+              {#if (wr.unreadChannel[p.id] ?? 0) > 0}
+                <span class="unread-badge">{wr.unreadChannel[p.id]}</span>
+              {/if}
             </button>
             <!-- Channel context menu trigger -->
             <div class="channel-menu-wrap">
@@ -245,6 +252,9 @@
             <div class="agent-name">{agent.name}</div>
             <div class="agent-model">{agent.model || agent.role}</div>
           </div>
+          {#if (wr.unreadDM[agent.id] ?? 0) > 0}
+            <span class="unread-badge">{wr.unreadDM[agent.id]}</span>
+          {/if}
         </button>
       {/each}
       {#if wr.agents.length === 0}
@@ -506,6 +516,22 @@
     padding: 0 4px;
     margin-left: 4px;
     vertical-align: middle;
+  }
+  /* Unread message badge — same shape as approval-badge, used on channels + agents */
+  .unread-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-btn);
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: 700;
+    border-radius: 99px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    margin-left: auto;
+    flex-shrink: 0;
   }
   .agent-status-dot {
     position: absolute;

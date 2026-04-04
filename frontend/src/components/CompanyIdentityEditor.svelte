@@ -81,7 +81,8 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 0 1.25rem 0.75rem;
+    padding: 0 1.25rem;
+    height: 48px;
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
   }
@@ -93,6 +94,7 @@
     font-size: 0.875rem;
     padding: 0.25rem 0.5rem;
     border-radius: 6px;
+    line-height: 1;
     transition: background 0.12s, color 0.12s;
   }
   .back-btn:hover { background: var(--bg-hover); color: var(--text-heading); }

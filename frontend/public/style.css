@@ -8,7 +8,6 @@
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
   -webkit-user-select: none;
-
   /* Design tokens — dark (default) */
   --titlebar-h: 44px;
   --bg-app: #0d0f14;
@@ -136,4 +135,19 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Allow text selection only where it makes sense: chat message content,
+   the company identity editor, and input/textarea fields. */
+.bubble-text,
+.think-body,
+.send-error,
+.milestone-text,
+.system-event-text,
+.identity-textarea,
+input,
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }

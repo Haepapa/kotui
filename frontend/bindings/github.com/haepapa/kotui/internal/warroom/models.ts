@@ -54,6 +54,75 @@ export class AgentInfo {
 }
 
 /**
+ * BrainFiles holds the three editable brain source documents for one agent.
+ * instruction.md is excluded — it is a compiled output and must never be
+ * edited directly.
+ */
+export class BrainFiles {
+    "soul": string;
+    "persona": string;
+    "skills": string;
+
+    /** Creates a new BrainFiles instance. */
+    constructor($$source: Partial<BrainFiles> = {}) {
+        if (!("soul" in $$source)) {
+            this["soul"] = "";
+        }
+        if (!("persona" in $$source)) {
+            this["persona"] = "";
+        }
+        if (!("skills" in $$source)) {
+            this["skills"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BrainFiles instance from a string or object.
+     */
+    static createFrom($$source: any = {}): BrainFiles {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BrainFiles($$parsedSource as Partial<BrainFiles>);
+    }
+}
+
+/**
+ * FirstRunResult is returned by InitFirstRun.
+ */
+export class FirstRunResult {
+    /**
+     * ConvID is the Lead Agent's DM conversation ID.
+     */
+    "conv_id": string;
+
+    /**
+     * IsNew is true when the app was uninitialised and a greeting was created.
+     */
+    "is_new": boolean;
+
+    /** Creates a new FirstRunResult instance. */
+    constructor($$source: Partial<FirstRunResult> = {}) {
+        if (!("conv_id" in $$source)) {
+            this["conv_id"] = "";
+        }
+        if (!("is_new" in $$source)) {
+            this["is_new"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FirstRunResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FirstRunResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FirstRunResult($$parsedSource as Partial<FirstRunResult>);
+    }
+}
+
+/**
  * HeartbeatState captures the current system health for the bottom bar.
  */
 export class HeartbeatState {

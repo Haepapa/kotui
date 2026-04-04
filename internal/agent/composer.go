@@ -20,8 +20,16 @@ var embeddedFiles embed.FS
 //  7. MCP tool fragment — available tools for this agent's clearance level
 //
 // The assembled prompt is written to instruction.md and returned.
-func compose(paths IdentityPaths, companyIdentityPath, mcpFragment, pastExperience string) (string, error) {
+func compose(paths IdentityPaths, agentID, companyIdentityPath, mcpFragment, pastExperience string) (string, error) {
 	var sb strings.Builder
+
+	// 0. Sticky agent identity header — placed first so the model always has its
+	// internal ID available when forming tool calls, regardless of persona name.
+	if agentID != "" {
+		sb.WriteString("# System Identity\n\n")
+		sb.WriteString(fmt.Sprintf("**Your internal agent_id is: `%s`** — always use this exact value in tool calls that require agent_id.\n", agentID))
+		sb.WriteString("Your *display name* (in persona.md) may be different — the agent_id above is the one that matters for tool calls.\n\n---\n\n")
+	}
 
 	// 1. Company Identity
 	companyIdentity := loadOptionalFile(companyIdentityPath, "*(Company identity not configured — set companyIdentityPath in config)*")
@@ -164,4 +172,16 @@ func readIdentityFile(path, name string) (string, error) {
 		return "", fmt.Errorf("compose: read %s: %w", name, err)
 	}
 	return string(data), nil
+}
+
+// ComposeInstruction is the exported wrapper around compose for use by packages
+// outside the agent package (e.g. the warroom service recomposing after a brain
+// file edit). It recompiles the system prompt from the source files and writes
+// the result to instruction.md.
+func ComposeInstruction(paths IdentityPaths, agentID, companyIdentityPath, mcpFragment string) error {
+	prompt, err := compose(paths, agentID, companyIdentityPath, mcpFragment, "")
+	if err != nil {
+		return fmt.Errorf("ComposeInstruction %s: %w", paths.Root, err)
+	}
+	return writeInstruction(paths, prompt)
 }

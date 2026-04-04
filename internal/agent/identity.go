@@ -72,6 +72,12 @@ func writeIfAbsent(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
+// AgentPaths is the exported wrapper around agentPaths for use by packages
+// outside the agent package (e.g. warroom service, tools).
+func AgentPaths(dataDir, agentID string) IdentityPaths {
+	return agentPaths(dataDir, agentID)
+}
+
 // writeInstruction writes the compiled system prompt to instruction.md.
 // Called by Spawn() and CultureUpdate() — always overwrites.
 func writeInstruction(paths IdentityPaths, content string) error {
@@ -85,6 +91,36 @@ func ReadInstruction(paths IdentityPaths) (string, error) {
 		return "", fmt.Errorf("read instruction.md: %w", err)
 	}
 	return string(data), nil
+}
+
+// ReadAgentName extracts the agent's display name from persona.md.
+// It looks for a "## Name" section and returns the first non-empty line after it.
+// Falls back to agentID if the file cannot be read or the section is absent.
+func ReadAgentName(dataDir, agentID string) string {
+	paths := agentPaths(dataDir, agentID)
+	data, err := os.ReadFile(paths.PersonaPath)
+	if err != nil {
+		return agentID
+	}
+	lines := strings.Split(string(data), "\n")
+	inNameSection := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## Name") {
+			inNameSection = true
+			continue
+		}
+		if inNameSection {
+			if trimmed == "" {
+				continue
+			}
+			if strings.HasPrefix(trimmed, "#") {
+				break // next section started
+			}
+			return trimmed
+		}
+	}
+	return agentID
 }
 
 // --- Default document generators -----------------------------------------

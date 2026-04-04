@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/haepapa/kotui/internal/agent"
 	"github.com/haepapa/kotui/internal/config"
@@ -40,6 +41,12 @@ type OrchestratorConfig struct {
 	SandboxRoot         string
 	CompanyIdentityPath string
 	AppConfig           config.Config
+
+	// OnBrainUpdate, if non-nil, is called whenever an agent successfully
+	// writes to one of its own brain files via the update_self MCP tool.
+	// The caller (typically WarRoomService) uses this to recompose
+	// instruction.md and emit a brain-update notification to the frontend.
+	OnBrainUpdate func(agentID, file, summary string)
 }
 
 // Orchestrator coordinates all agents, tools, and communication.
@@ -93,7 +100,7 @@ func New(
 
 	// Build MCP engine sandboxed to the project workspace.
 	mcpEng := mcp.New(cfg.SandboxRoot)
-	if err := tools.RegisterAll(mcpEng, cfg.AppConfig); err != nil {
+	if err := tools.RegisterAllWithHooks(mcpEng, cfg.AppConfig, cfg.OnBrainUpdate); err != nil {
 		return nil, fmt.Errorf("orchestrator: register tools: %w", err)
 	}
 
@@ -194,7 +201,9 @@ func (o *Orchestrator) channelRawFn(agentID string) func(models.MessageKind, str
 
 // HandleBossCommand is the main entry point for a Boss instruction.
 // It runs the full Lead → task decomposition → Worker loop.
-func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) error {
+// onChunk, if non-nil, receives streamed tokens from the Lead for the live
+// typing effect in the channel chat (same mechanism as DM streaming).
+func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, onChunk func(string)) error {
 	o.disp.DispatchSummary(models.Message{
 		ProjectID:      o.projectID,
 		ConversationID: o.convID,
@@ -215,7 +224,7 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 		}
 	}
 	o.lead.OnRaw = o.channelRawFn("lead")
-	decomposed, err := o.lead.Turn(ctx, augmented)
+	decomposed, err := o.lead.TurnStream(ctx, augmented, onChunk)
 	o.lead.OnRaw = nil
 	if err != nil {
 		var escErr *EscalationNeededError
@@ -300,7 +309,7 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string) er
 	// Step 4: Lead produces final summary milestone.
 	o.leadMu.Lock()
 	o.lead.OnRaw = o.channelRawFn("lead")
-	summary, sumErr := o.lead.Turn(ctx, "All sub-tasks are complete. Provide a brief summary of what was accomplished for the Boss.")
+	summary, sumErr := o.lead.TurnStream(ctx, "All sub-tasks are complete. Provide a brief summary of what was accomplished for the Boss.", onChunk)
 	o.lead.OnRaw = nil
 	o.leadMu.Unlock()
 	if sumErr == nil {
@@ -393,7 +402,12 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 	}
 	defer func() { ra.OnRaw = nil }()
 
-	response, err := ra.TurnStream(ctx, augmented, onChunk)
+	// Apply a per-call watchdog: if inference runs longer than 30 minutes the
+	// context is cancelled and an error is returned to the caller.
+	watchdogCtx, watchdogCancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer watchdogCancel()
+
+	response, err := ra.TurnStream(watchdogCtx, augmented, onChunk)
 	if err != nil {
 		return fmt.Errorf("dm %s: %w", agentID, err)
 	}
@@ -438,6 +452,24 @@ func (o *Orchestrator) agentIdentityForDM(agentID string) (model string, clearan
 		return o.cfg.WorkerModel, models.ClearanceSpecialist,
 			"You are a helpful AI assistant. Respond clearly and concisely."
 	}
+}
+
+// InvalidateDMAgent clears the cached RunningAgent for agentID so that the
+// next DM message triggers a fresh spawn from the (possibly updated) brain files.
+func (o *Orchestrator) InvalidateDMAgent(agentID string) {
+	o.dmAgentsMu.Lock()
+	defer o.dmAgentsMu.Unlock()
+	delete(o.dmAgents, agentID)
+}
+
+// MCPFragmentForAgent returns the MCP system-prompt fragment appropriate for
+// the given agent's clearance level. Used by external callers (e.g. service)
+// when recomposing instruction.md after a brain file edit.
+func (o *Orchestrator) MCPFragmentForAgent(agentID string) string {
+	if agentID == "lead" {
+		return o.mcpEng.SystemPromptFragment(models.ClearanceLead)
+	}
+	return o.mcpEng.SystemPromptFragment(models.ClearanceSpecialist)
 }
 
 // CultureBroadcast forces a full context reset on all active agents.

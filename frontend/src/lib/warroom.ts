@@ -7,6 +7,7 @@ import {
   CreateProject as _CreateProject,
   DecideApproval as _DecideApproval,
   GetActiveConversation as _GetActiveConversation,
+  GetAgentBrainFiles as _GetAgentBrainFiles,
   GetAgents as _GetAgents,
   GetCompanyIdentity as _GetCompanyIdentity,
   GetConfig as _GetConfig,
@@ -15,6 +16,7 @@ import {
   GetOrCreateDirectConversation as _GetOrCreateDirectConversation,
   GetPendingApprovals as _GetPendingApprovals,
   GetProjects as _GetProjects,
+  SaveAgentBrainFile as _SaveAgentBrainFile,
   SaveCompanyIdentity as _SaveCompanyIdentity,
   SaveConfig as _SaveConfig,
   SendBossCommand as _SendBossCommand,
@@ -25,7 +27,10 @@ import {
   ListOllamaModels as _ListOllamaModels,
   PullOllamaModel as _PullOllamaModel,
   DeleteOllamaModel as _DeleteOllamaModel,
+  InitFirstRun as _InitFirstRun,
+  ResetAppData as _ResetAppData,
 } from '../../bindings/github.com/haepapa/kotui/internal/warroom/warroomservice';
+import type { BrainFiles as _BrainFiles, FirstRunResult as _FirstRunResult } from '../../bindings/github.com/haepapa/kotui/internal/warroom/models';
 
 import { Events } from '@wailsio/runtime';
 import type { AgentInfo, Approval, HeartbeatState, KotuiMessage, Project, UIConfig } from './types';
@@ -117,6 +122,26 @@ export function deleteOllamaModel(endpoint: string, name: string): Promise<void>
   return _DeleteOllamaModel(endpoint, name);
 }
 
+export function resetAppData(): Promise<void> {
+  return _ResetAppData();
+}
+
+export type FirstRunResult = { conv_id: string; is_new: boolean };
+
+export type BrainFiles = { soul: string; persona: string; skills: string };
+
+export function getAgentBrainFiles(agentID: string): Promise<BrainFiles> {
+  return _GetAgentBrainFiles(agentID) as Promise<BrainFiles>;
+}
+
+export function saveAgentBrainFile(agentID: string, fileKey: string, content: string, summary: string): Promise<void> {
+  return _SaveAgentBrainFile(agentID, fileKey, content, summary);
+}
+
+export function initFirstRun(): Promise<FirstRunResult> {
+  return _InitFirstRun() as Promise<FirstRunResult>;
+}
+
 // --- Event subscriptions -----------------------------------------------
 
 type MessageHandler = (msg: KotuiMessage) => void;
@@ -147,4 +172,20 @@ export function onAgents(handler: AgentsHandler): () => void {
 
 export function onChannelBusy(handler: (busy: boolean) => void): () => void {
   return Events.On('kotui:channel_busy', (ev) => handler(ev.data as boolean));
+}
+
+export function onChannelStream(handler: (payload: { conversation_id: string; chunk: string }) => void): () => void {
+  return Events.On('kotui:channel_stream', (ev) => handler(ev.data as { conversation_id: string; chunk: string }));
+}
+
+export type BrainUpdatePayload = {
+  agent_id: string;
+  file: string;
+  summary: string;
+  conv_id: string;
+  message: KotuiMessage;
+};
+
+export function onBrainUpdate(handler: (payload: BrainUpdatePayload) => void): () => void {
+  return Events.On('kotui:brain_update', (ev) => handler(ev.data as BrainUpdatePayload));
 }

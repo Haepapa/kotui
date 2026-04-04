@@ -13,6 +13,12 @@ import (
 // cfg is required for tools that need access to application configuration
 // (e.g. iot_gateway reads Senior Consultant SSH settings).
 func RegisterAll(eng *mcp.Engine, cfg config.Config) error {
+	return RegisterAllWithHooks(eng, cfg, nil)
+}
+
+// RegisterAllWithHooks is like RegisterAll but also wires the optional
+// onBrainUpdate hook used by the update_self tool.
+func RegisterAllWithHooks(eng *mcp.Engine, cfg config.Config, onBrainUpdate func(agentID, file, summary string)) error {
 	box := eng.Sandbox()
 
 	defs := []mcp.ToolDef{
@@ -22,6 +28,7 @@ func RegisterAll(eng *mcp.Engine, cfg config.Config) error {
 		iotGatewayTool(cfg),
 		webSearchTool(),
 		projectCriticTool(box),
+		SelfUpdateTool(cfg.App.DataDir, onBrainUpdate),
 	}
 
 	for _, d := range defs {

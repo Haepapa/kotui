@@ -128,6 +128,29 @@ func versionFromFilename(name string) (int, error) {
 	return v, nil
 }
 
+// Reset deletes all user data from every table while preserving the schema.
+// schema_migrations is intentionally left intact so migrations do not re-run.
+// Tables are deleted in reverse dependency order to satisfy FK constraints.
+func (db *DB) Reset(ctx context.Context) error {
+	tables := []string{
+		"journal_embeddings",
+		"approvals",
+		"tasks",
+		"messages",
+		"conversations",
+		"agents",
+		"projects",
+	}
+	for _, t := range tables {
+		if _, err := db.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+			if !strings.Contains(err.Error(), "no such table") {
+				return fmt.Errorf("store: reset table %s: %w", t, err)
+			}
+		}
+	}
+	return nil
+}
+
 // Close closes the underlying database connection.
 func (db *DB) Close() error {
 	return db.DB.Close()

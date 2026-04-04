@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getConfig, saveConfig, listOllamaModels, pullOllamaModel, deleteOllamaModel } from '../lib/warroom';
+  import { getConfig, saveConfig, listOllamaModels, pullOllamaModel, deleteOllamaModel, resetAppData } from '../lib/warroom';
   import { saveAccentColor, currentAccentColor, DEFAULT_ACCENT } from '../lib/theme';
   import type { UIConfig } from '../lib/types';
 
@@ -57,11 +57,12 @@
     pullStatus: 'idle' | 'pulling' | 'done' | 'error';
     pullError: string;
     deleting: string;
+    confirmDelete: string; // model name awaiting inline delete confirmation
   };
 
   function freshState(): OllamaState {
     return { models: [], loading: false, opError: '', connected: null, configured: true,
-             pullName: '', pullStatus: 'idle', pullError: '', deleting: '' };
+             pullName: '', pullStatus: 'idle', pullError: '', deleting: '', confirmDelete: '' };
   }
 
   let local = $state<OllamaState>(freshState());
@@ -128,7 +129,7 @@
   }
 
   async function handleDelete(state: OllamaState, endpoint: string, name: string) {
-    if (!confirm(`Delete model "${name}"? This cannot be undone.`)) return;
+    state.confirmDelete = '';
     state.deleting = name;
     state.opError = '';
     try {
@@ -150,6 +151,27 @@
     } catch (e: unknown) {
       saveStatus = 'error';
       errorMsg = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  // ── Reset ─────────────────────────────────────────────────────────────
+  let resetStatus = $state<'idle' | 'confirming' | 'resetting' | 'error'>('idle');
+  let resetError = $state('');
+
+  async function handleReset() {
+    if (resetStatus === 'idle') {
+      resetStatus = 'confirming';
+      return;
+    }
+    resetStatus = 'resetting';
+    resetError = '';
+    try {
+      await resetAppData();
+      // Reload to start fresh — all in-memory state is now stale.
+      window.location.reload();
+    } catch (e: unknown) {
+      resetStatus = 'error';
+      resetError = e instanceof Error ? e.message : String(e);
     }
   }
 </script>
@@ -292,10 +314,23 @@
             {#each local.models as m}
               <div class="model-row">
                 <span class="model-name">{m}</span>
-                <button class="delete-btn" onclick={() => handleDelete(local, cfg.ollama_endpoint, m)}
-                  disabled={local.deleting === m} title="Delete model">
-                  {local.deleting === m ? '…' : '✕'}
-                </button>
+                {#if local.confirmDelete === m}
+                  <span class="delete-confirm-label">Delete?</span>
+                  <button class="delete-confirm-btn"
+                    onclick={() => handleDelete(local, cfg.ollama_endpoint, m)}
+                    disabled={local.deleting === m}>
+                    {local.deleting === m ? '…' : 'Yes'}
+                  </button>
+                  <button class="delete-cancel-btn" onclick={() => local.confirmDelete = ''}>
+                    No
+                  </button>
+                {:else}
+                  <button class="delete-btn"
+                    onclick={() => local.confirmDelete = m}
+                    disabled={local.deleting === m} title="Delete model">
+                    {local.deleting === m ? '…' : '✕'}
+                  </button>
+                {/if}
               </div>
             {/each}
           </div>
@@ -392,10 +427,23 @@
             {#each remote.models as m}
               <div class="model-row">
                 <span class="model-name">{m}</span>
-                <button class="delete-btn" onclick={() => handleDelete(remote, cfg.senior_endpoint, m)}
-                  disabled={remote.deleting === m} title="Delete model">
-                  {remote.deleting === m ? '…' : '✕'}
-                </button>
+                {#if remote.confirmDelete === m}
+                  <span class="delete-confirm-label">Delete?</span>
+                  <button class="delete-confirm-btn"
+                    onclick={() => handleDelete(remote, cfg.senior_endpoint, m)}
+                    disabled={remote.deleting === m}>
+                    {remote.deleting === m ? '…' : 'Yes'}
+                  </button>
+                  <button class="delete-cancel-btn" onclick={() => remote.confirmDelete = ''}>
+                    No
+                  </button>
+                {:else}
+                  <button class="delete-btn"
+                    onclick={() => remote.confirmDelete = m}
+                    disabled={remote.deleting === m} title="Delete model">
+                    {remote.deleting === m ? '…' : '✕'}
+                  </button>
+                {/if}
               </div>
             {/each}
           </div>
@@ -434,6 +482,42 @@
       <h4>Webhook Server</h4>
       <label><span>Port</span><input type="number" bind:value={cfg.webhook_port} placeholder="8080" min="1" max="65535" /></label>
       <label><span>Shared Secret</span><input type="password" bind:value={cfg.webhook_secret} placeholder="Optional HMAC secret" /></label>
+    </section>
+
+    <!-- ── Danger Zone ───────────────────────────────────────────── -->
+    <section class="settings-section danger-zone">
+      <h3>Danger Zone</h3>
+      <p class="section-note danger-note">
+        Permanently deletes all data — chat history, projects, agents, agent personality,
+        skill and soul files, and resets all settings to defaults.
+        <strong>This cannot be undone.</strong>
+      </p>
+
+      {#if resetStatus === 'confirming'}
+        <div class="reset-confirm">
+          <p class="reset-warn">⚠ All data will be permanently deleted. Are you sure?</p>
+          <div class="reset-actions">
+            <button class="reset-confirm-btn" onclick={handleReset} disabled={resetStatus === 'resetting'}>
+              Yes, delete everything
+            </button>
+            <button class="reset-cancel-btn" onclick={() => resetStatus = 'idle'}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      {:else}
+        <button
+          class="reset-btn"
+          onclick={handleReset}
+          disabled={resetStatus === 'resetting'}
+        >
+          {resetStatus === 'resetting' ? 'Resetting…' : 'Reset App & Delete All Data'}
+        </button>
+      {/if}
+
+      {#if resetStatus === 'error'}
+        <p class="status-note danger">{resetError}</p>
+      {/if}
     </section>
 
     <div class="settings-footer">
@@ -671,6 +755,36 @@
   .delete-btn:hover:not(:disabled) { background: rgba(248,113,113,0.12); color: #f87171; }
   .delete-btn:disabled { opacity: 0.4; cursor: default; }
 
+  .delete-confirm-label {
+    font-size: 0.75rem;
+    color: #f87171;
+    margin-right: 0.25rem;
+  }
+  .delete-confirm-btn {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #f87171;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.1s;
+  }
+  .delete-confirm-btn:hover:not(:disabled) { background: #ef4444; }
+  .delete-confirm-btn:disabled { opacity: 0.5; cursor: default; }
+  .delete-cancel-btn {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: none;
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+  .delete-cancel-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
   .status-note {
     font-size: 0.8125rem;
     color: var(--text-muted);
@@ -701,4 +815,72 @@
   .save-btn:disabled { opacity: 0.5; cursor: default; }
   .status-saved { font-size: 0.875rem; color: #4ade80; }
   .status-error { font-size: 0.875rem; color: #f87171; }
+
+  /* ── Danger Zone ──────────────────────────────────────────── */
+  .danger-zone {
+    border: 1px solid rgba(248, 113, 113, 0.25);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    background: rgba(248, 113, 113, 0.04);
+  }
+  .danger-zone h3 { color: #f87171; }
+  .danger-note { color: var(--text-secondary); }
+  .danger-note strong { color: #f87171; }
+
+  .reset-btn {
+    padding: 0.45rem 1rem;
+    background: transparent;
+    color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.45);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    align-self: flex-start;
+  }
+  .reset-btn:hover:not(:disabled) {
+    background: rgba(248, 113, 113, 0.12);
+    border-color: #f87171;
+  }
+  .reset-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .reset-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .reset-warn {
+    font-size: 0.875rem;
+    color: #f87171;
+    margin: 0;
+    font-weight: 500;
+  }
+  .reset-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .reset-confirm-btn {
+    padding: 0.4rem 0.875rem;
+    background: #f87171;
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.12s;
+  }
+  .reset-confirm-btn:hover:not(:disabled) { background: #ef4444; }
+  .reset-confirm-btn:disabled { opacity: 0.5; cursor: default; }
+  .reset-cancel-btn {
+    padding: 0.4rem 0.875rem;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .reset-cancel-btn:hover { background: var(--bg-surface); color: var(--text-primary); }
 </style>

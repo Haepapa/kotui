@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/haepapa/kotui/internal/agent"
 	"github.com/haepapa/kotui/internal/config"
 	"github.com/haepapa/kotui/internal/dispatcher"
 	"github.com/haepapa/kotui/internal/memory"
@@ -324,6 +325,71 @@ func (s *WarRoomService) Shutdown() {
 
 // --- Exported methods callable from TypeScript ---------------------------
 
+// FirstRunResult is returned by InitFirstRun.
+type FirstRunResult struct {
+	// ConvID is the Lead Agent's DM conversation ID.
+	ConvID string `json:"conv_id"`
+	// IsNew is true when the app was uninitialised and a greeting was created.
+	IsNew bool `json:"is_new"`
+}
+
+const leadGreeting = `Hi! I'm your Lead Agent — I'm here to help you run complex projects with a team of specialist AI agents.
+
+To get us started, it would help to know a little about you:
+
+- **What's your name?** How would you like me to address you?
+- **Would you like to give me a name and a personality?** For example: *"Call yourself Alex, be direct and concise"* — or leave it entirely to me!
+- **What kind of work do you have in mind?** I can build software, research topics, write content, and much more.
+
+Once I know a bit about you I'll tailor how the team works and we can hit the ground running. What would you like me to know?`
+
+// InitFirstRun checks whether the app has been used before.
+// On a fresh install (no projects exist) it creates a default "General" project,
+// opens a Lead DM conversation, and saves a welcome greeting so the user has an
+// immediate call to action in the sidebar. Subsequent calls are no-ops.
+func (s *WarRoomService) InitFirstRun(ctx context.Context) (FirstRunResult, error) {
+	if s.db == nil {
+		return FirstRunResult{}, nil
+	}
+	projects, err := s.db.ListProjects(ctx)
+	if err != nil {
+		return FirstRunResult{}, fmt.Errorf("first run: list projects: %w", err)
+	}
+	if len(projects) > 0 {
+		convID, _ := s.db.GetDMConversation(ctx, "lead")
+		return FirstRunResult{ConvID: convID, IsNew: false}, nil
+	}
+
+	// First-ever run — create the General project using the normal service path
+	// so all side-effects (SwitchProject, emitProjectsChanged, etc.) run correctly.
+	proj, err := s.CreateProject(ctx, "General", "Default workspace")
+	if err != nil {
+		return FirstRunResult{}, fmt.Errorf("first run: create project: %w", err)
+	}
+
+	// Create the Lead DM conversation.
+	convID, err := s.db.CreateConversation(ctx, proj.ID, "dm:lead")
+	if err != nil {
+		return FirstRunResult{}, fmt.Errorf("first run: create lead dm: %w", err)
+	}
+
+	// Persist the greeting — the frontend fetches it via GetMessages after
+	// registering the DM conv, avoiding any event-routing race condition.
+	if err := s.db.SaveMessage(ctx, models.Message{
+		ProjectID:      proj.ID,
+		ConversationID: convID,
+		AgentID:        "lead",
+		Kind:           models.KindAgentMessage,
+		Tier:           models.TierSummary,
+		Content:        leadGreeting,
+		CreatedAt:      time.Now(),
+	}); err != nil {
+		return FirstRunResult{}, fmt.Errorf("first run: save greeting: %w", err)
+	}
+
+	return FirstRunResult{ConvID: convID, IsNew: true}, nil
+}
+
 // GetProjects returns all projects ordered by creation date (newest first).
 func (s *WarRoomService) GetProjects(ctx context.Context) ([]models.Project, error) {
 	if s.db == nil {
@@ -406,17 +472,24 @@ func (s *WarRoomService) SwitchProject(ctx context.Context, id string) error {
 			return err
 		}
 	}
-	// Retrieve the stable war-room conversation for this project.
-	convID, err := s.db.GetConversationByTitle(ctx, id, "war-room")
+	// Retrieve (or create) the stable war-room conversation for this project.
+	// Use GetOrCreate so that s.activeConvID is always populated, even on the
+	// first call before any messages have been sent.
+	convID, err := s.db.GetOrCreateWarRoomConversation(ctx, id)
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
 	s.activeConvID = convID
-	s.mu.Unlock()
+	// Persist the active project ID to config.toml so that on the next app
+	// launch gui.go calls orch.SetProject with the correct ID and o.convID is
+	// populated before any HandleBossCommand runs. Without this, all channel
+	// messages are saved with conversation_id="" and are lost on navigation.
+	s.cfg.Project.ActiveProjectID = id
+	cfgCopy := s.cfg
+	cfgPath := s.cfgPath
 
 	// Reset heartbeat for the new project.
-	s.mu.Lock()
 	s.heartbeat = HeartbeatState{
 		IsHealthy:   true,
 		Phase:       "Idle",
@@ -427,6 +500,16 @@ func (s *WarRoomService) SwitchProject(ctx context.Context, id string) error {
 		s.heartbeat.VRAMProfile = string(s.orch.VRAMProfile())
 	}
 	s.mu.Unlock()
+
+	// Write config outside the lock to avoid blocking message dispatch.
+	if cfgPath != "" {
+		if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err == nil {
+			if f, err := os.Create(cfgPath); err == nil {
+				_ = toml.NewEncoder(f).Encode(cfgCopy)
+				_ = f.Close()
+			}
+		}
+	}
 
 	return nil
 }
@@ -468,14 +551,27 @@ func (s *WarRoomService) GetMessages(ctx context.Context, conversationID string,
 
 // SendBossCommand enqueues a Boss instruction to the Orchestrator.
 // Returns immediately; responses arrive via kotui:message events.
+// Token chunks are streamed to the frontend via kotui:channel_stream so the
+// channel chat has the same live typing effect as DM conversations.
 func (s *WarRoomService) SendBossCommand(ctx context.Context, command string) error {
 	if s.orch == nil {
 		return fmt.Errorf("orchestrator not initialised — is Ollama running?")
 	}
+	s.mu.RLock()
+	convID := s.activeConvID
+	s.mu.RUnlock()
+
+	onChunk := func(chunk string) {
+		s.app.Event.Emit("kotui:channel_stream", map[string]any{
+			"conversation_id": convID,
+			"chunk":           chunk,
+		})
+	}
+
 	s.app.Event.Emit("kotui:channel_busy", true)
 	go func() {
 		defer s.app.Event.Emit("kotui:channel_busy", false)
-		if err := s.orch.HandleBossCommand(context.Background(), command); err != nil {
+		if err := s.orch.HandleBossCommand(context.Background(), command, onChunk); err != nil {
 			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
 		}
 	}()
@@ -493,10 +589,12 @@ func (s *WarRoomService) GetAgents(ctx context.Context) ([]AgentInfo, error) {
 		defaultStatus = "offline"
 	}
 
-	// Always include the Lead as a synthetic entry.
+	// Always include the Lead. Read the real display name from persona.md
+	// so renames made via brain files or brain panel are reflected here.
+	leadName := agent.ReadAgentName(s.cfg.App.DataDir, "lead")
 	infos := []AgentInfo{{
 		ID:     "lead",
-		Name:   "Lead",
+		Name:   leadName,
 		Role:   "lead",
 		Status: defaultStatus,
 		Model:  "",
@@ -522,9 +620,14 @@ func (s *WarRoomService) GetAgents(ctx context.Context) ([]AgentInfo, error) {
 			infos[0].Status = status
 			continue
 		}
+		// Prefer the name stored in persona.md; fall back to the DB record.
+		displayName := agent.ReadAgentName(s.cfg.App.DataDir, a.ID)
+		if displayName == a.ID {
+			displayName = a.Name // DB name is better than the raw ID
+		}
 		infos = append(infos, AgentInfo{
 			ID:     a.ID,
-			Name:   a.Name,
+			Name:   displayName,
 			Role:   string(a.Role),
 			Status: status,
 			Model:  a.Model,
@@ -719,32 +822,36 @@ func (s *WarRoomService) GetCompanyIdentity(ctx context.Context) (string, error)
 
 const companyIdentityTemplate = `# Company Identity
 
-## Overview
-<!-- Describe your organisation in 2–3 sentences. What does it do? Who does it serve? -->
+## 1. Vision & Purpose
 
-## Mission
-<!-- What is the core purpose of your organisation? What problem does it solve? -->
+- **Vision:** To deliver high-quality, local-first technical solutions through collaborative, autonomous intelligence.
+- **Purpose:** To execute complex, multi-step projects with the precision of a professional engineering team, while maintaining absolute data privacy and user observability.
 
-## Values
-<!-- What principles guide your team? -->
-- 
-- 
-- 
+## 2. Core Values (The Rules of Engagement)
 
-## Team Structure
-<!-- How is your team organised? Roles, departments, reporting lines. -->
+Every agent, from the Lead to the newest Specialist, must align their reasoning with these values:
 
-## Products & Services
-<!-- What does your organisation offer? Brief description of each. -->
+- **Precision over Speed:** We prioritize a verified, accurate result over a fast, hallucinated one. If a task is ambiguous, stop and ask the Boss.
 
-## Target Market
-<!-- Who are your customers or stakeholders? What industries or demographics? -->
+- **Radical Transparency:** Every thought, tool call, and internal correction must be logged. Never hide a failure; report it as a lesson learned.
 
-## Communication Style
-<!-- How does your team communicate internally and externally? Tone, formality, preferred channels. -->
+- **Privacy First:** Our "Headquarters" is local. Never suggest or use a cloud-based service if a local alternative exists in our MCP registry.
 
-## Current Priorities
-<!-- What is the team focused on right now? Key goals for this period. -->
+- **Resource Mindfulness:** We operate on personal hardware. Agents must minimize unnecessary processing and manage VRAM efficiently to ensure the system remains responsive for the Boss.
+
+## 3. The Command Structure
+
+- **The Boss (User):** The ultimate authority. The Boss sets the strategy, provides final approvals, and defines the "Vibe" of the team.
+
+- **The Lead Agent (Manager):** The Architect of the War Room. Responsible for decomposing the Boss's goals into a Task Tree, "hiring" the right specialists, and verifying every piece of output.
+
+- **Specialist Agents (Workers):** The subject matter experts. They are empowered to use tools and execute code, but must submit all drafts to the Lead for verification before the Boss sees them.
+
+## 4. Long-Term Objectives
+
+- Establish a robust, self-improving repository of project artifacts.
+
+- Build a specialized team of digital staff whose personalities and skills grow alongside the company's needs.
 `
 
 // SaveCompanyIdentity writes COMPANY_IDENTITY.md and triggers CultureBroadcast.
@@ -758,6 +865,166 @@ func (s *WarRoomService) SaveCompanyIdentity(ctx context.Context, content string
 		}
 	}
 	return nil
+}
+
+// ResetAppData wipes all user data and resets the configuration to defaults.
+// This deletes all chat history, projects, agents, agent identity files, and
+// resets config.toml. The caller must restart (or reload) the app afterwards.
+func (s *WarRoomService) ResetAppData(ctx context.Context) error {
+	// 1. Wipe all rows from the database (schema is preserved so migrations skip on restart).
+	if err := s.db.Reset(ctx); err != nil {
+		return fmt.Errorf("reset: database: %w", err)
+	}
+
+	// 2. Delete the agents directory tree (identity, skills, soul, journal files).
+	agentsDir := filepath.Join(s.cfg.App.DataDir, "agents")
+	if err := os.RemoveAll(agentsDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("reset: agents dir: %w", err)
+	}
+
+	// 3. Delete the company identity file.
+	if err := os.Remove(s.companyIdentityPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("reset: company identity: %w", err)
+	}
+
+	// 4. Overwrite config with defaults (preserving the data_dir path).
+	defaults := config.Defaults()
+	defaults.App.DataDir = s.cfg.App.DataDir
+	if err := writeDefaultConfig(s.cfgPath, defaults); err != nil {
+		return fmt.Errorf("reset: config: %w", err)
+	}
+
+	return nil
+}
+
+// BrainFiles holds the three editable brain source documents for one agent.
+// instruction.md is excluded — it is a compiled output and must never be
+// edited directly.
+type BrainFiles struct {
+	Soul    string `json:"soul"`
+	Persona string `json:"persona"`
+	Skills  string `json:"skills"`
+}
+
+// GetAgentBrainFiles reads the three editable brain files for the given agent.
+func (s *WarRoomService) GetAgentBrainFiles(ctx context.Context, agentID string) (BrainFiles, error) {
+	paths := agent.AgentPaths(s.cfg.App.DataDir, agentID)
+
+	soul, err := os.ReadFile(paths.SoulPath)
+	if err != nil {
+		return BrainFiles{}, fmt.Errorf("read soul.md: %w", err)
+	}
+	persona, err := os.ReadFile(paths.PersonaPath)
+	if err != nil {
+		return BrainFiles{}, fmt.Errorf("read persona.md: %w", err)
+	}
+	skills, err := os.ReadFile(paths.SkillsPath)
+	if err != nil {
+		return BrainFiles{}, fmt.Errorf("read skills.md: %w", err)
+	}
+
+	return BrainFiles{
+		Soul:    string(soul),
+		Persona: string(persona),
+		Skills:  string(skills),
+	}, nil
+}
+
+// SaveAgentBrainFile writes one brain file (soul, persona, or skills) for the
+// given agent, then recomposes instruction.md and invalidates the DM agent
+// cache so the next message picks up the updated prompt.
+// summary is a short human-readable description of the change shown in the DM.
+func (s *WarRoomService) SaveAgentBrainFile(ctx context.Context, agentID, fileKey, content, summary string) error {
+	paths := agent.AgentPaths(s.cfg.App.DataDir, agentID)
+
+	var targetPath string
+	switch fileKey {
+	case "soul":
+		targetPath = paths.SoulPath
+	case "persona":
+		targetPath = paths.PersonaPath
+	case "skills":
+		targetPath = paths.SkillsPath
+	default:
+		return fmt.Errorf("unknown brain file %q: must be soul, persona, or skills", fileKey)
+	}
+
+	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("save %s.md: %w", fileKey, err)
+	}
+
+	// Recompose instruction.md from the updated source files.
+	if s.orch != nil {
+		mcpFrag := s.orch.MCPFragmentForAgent(agentID)
+		if err := agent.ComposeInstruction(paths, agentID, s.companyIdentityPath, mcpFrag); err != nil {
+			// Non-fatal: log and continue — the old instruction is still usable.
+			s.app.Event.Emit("kotui:error", map[string]string{"error": "brain recompose: " + err.Error()})
+		}
+		// Clear the DM agent cache so the next message spawns from fresh files.
+		s.orch.InvalidateDMAgent(agentID)
+	}
+
+	// Emit brain-update notification to the frontend.
+	s.EmitBrainUpdate(ctx, agentID, fileKey, summary)
+
+	// When the persona file changes the agent's display name may have changed.
+	// Refresh the agent roster so the sidebar updates immediately.
+	if fileKey == "persona" {
+		s.emitAgentsChanged(ctx)
+	}
+	return nil
+}
+
+// EmitBrainUpdate records a system_event in the agent's DM conversation and
+// fires a kotui:brain_update event so the frontend can update the unread badge.
+// Called both from SaveAgentBrainFile (user-initiated) and from the update_self
+// MCP tool callback (agent-initiated).
+func (s *WarRoomService) EmitBrainUpdate(ctx context.Context, agentID, file, summary string) {
+	convID, _ := s.db.GetDMConversation(ctx, agentID)
+
+	note := fmt.Sprintf("🧠 Brain updated · **%s.md**", file)
+	if summary != "" {
+		note += " — " + summary
+	}
+
+	msg := models.Message{
+		ProjectID:      s.cfg.Project.ActiveProjectID,
+		ConversationID: convID,
+		AgentID:        agentID,
+		Kind:           models.KindSystemEvent,
+		Tier:           models.TierSummary,
+		Content:        note,
+		CreatedAt:      time.Now(),
+	}
+	if s.db != nil && convID != "" {
+		_ = s.db.SaveMessage(ctx, msg)
+	}
+	s.app.Event.Emit("kotui:brain_update", map[string]any{
+		"agent_id": agentID,
+		"file":     file,
+		"summary":  summary,
+		"conv_id":  convID,
+		"message":  msg,
+	})
+
+	// A persona update may carry a name change — refresh the agent roster
+	// so the sidebar and chat headers reflect the new name immediately.
+	if file == "persona" {
+		s.emitAgentsChanged(ctx)
+	}
+}
+
+// writeDefaultConfig encodes cfg as TOML to path, creating parent directories as needed.
+func writeDefaultConfig(path string, cfg config.Config) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return toml.NewEncoder(f).Encode(cfg)
 }
 
 // GetOrCreateDirectConversation returns or creates a DM conversation for the given agent.
