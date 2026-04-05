@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { KotuiMessage, ViewMode, HeartbeatState, QueueState } from '../lib/types';
   import { sendBossCommand, sendDirectMessage } from '../lib/warroom';
-  import { wr, agentName, goToFiles } from '../stores/warroom.svelte';
+  import { wr, agentName, goToFiles, extractSubTask } from '../stores/warroom.svelte';
 
   interface Props {
     messages: KotuiMessage[];
@@ -175,6 +175,7 @@
   );
   const statusLabel = $derived(
     queueState?.throttled ? '⚠ System busy — background tasks paused'
+    : (queueState?.active || isBusy) && extractSubTask(streamContent) ? extractSubTask(streamContent)
     : queueState?.active ? (heartbeat.breadcrumbs.at(-1) ?? 'Working…')
     : queueState?.p3 ? `Background tasks queued (${queueState.p3})`
     : isBusy ? (heartbeat.breadcrumbs.at(-1) ?? 'Working…')
@@ -364,7 +365,7 @@
   <!-- Status bar -->
   <div class="status-bar">
     <span class="status-dot" class:active={dotColor === 'active'} class:queued={dotColor === 'queued'} class:throttled={dotColor === 'throttled'}></span>
-    <span class="status-label">{statusLabel}</span>
+    <span class="status-label" class:thinking={(queueState?.active || isBusy) && !!extractSubTask(streamContent)}>{statusLabel}</span>
     {#if queueState && (queueState.p1 > 0 || queueState.p2 > 0 || queueState.p3 > 0)}
       <span class="queue-chips">
         {#if queueState.p1 > 0}<span class="queue-chip chip-p1">P1 ×{queueState.p1}</span>{/if}
@@ -799,6 +800,10 @@
   .status-label {
     font-size: 0.75rem;
     color: var(--text-secondary);
+  }
+  .status-label.thinking {
+    color: #facc15;
+    font-style: italic;
   }
   .queue-chips {
     display: flex;

@@ -354,6 +354,19 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 			continue // Lead handles its own tasks inline
 		}
 
+		// Spec E: Post a social handoff message so the Boss sees the Lead's
+		// reasoning before the specialist gets to work.
+		if task.Justification != "" {
+			o.disp.DispatchSummary(models.Message{
+				ProjectID:      o.projectID,
+				ConversationID: o.convID,
+				Kind:           models.KindAgentMessage,
+				Tier:           models.TierSummary,
+				AgentID:        "lead",
+				Content:        fmt.Sprintf("🎯 **%s** → assigning to specialist. %s", task.Title, task.Justification),
+			})
+		}
+
 		job := WorkerJob{
 			TaskID:      task.ID,
 			Instruction: fmt.Sprintf("Task: %s\n\n%s", task.Title, task.Description),

@@ -4,9 +4,10 @@
   interface Props {
     heartbeat: HeartbeatState;
     isBusy: boolean;
+    subTask?: string;
   }
 
-  let { heartbeat, isBusy }: Props = $props();
+  let { heartbeat, isBusy, subTask = '' }: Props = $props();
 </script>
 
 <footer class="heartbeat-bar">
@@ -20,15 +21,19 @@
     ></div>
   </div>
 
-  <!-- Breadcrumb trail -->
+  <!-- Breadcrumbs or live sub-task text when busy -->
   <div class="breadcrumbs">
-    {#each heartbeat.breadcrumbs as crumb, i (i)}
-      {#if i > 0}<span class="sep">›</span>{/if}
-      <span
-        class="crumb"
-        class:active={i === heartbeat.breadcrumbs.length - 1}
-      >{crumb}</span>
-    {/each}
+    {#if isBusy && subTask}
+      <span class="sub-task">{subTask}</span>
+    {:else}
+      {#each heartbeat.breadcrumbs as crumb, i (i)}
+        {#if i > 0}<span class="sep">›</span>{/if}
+        <span
+          class="crumb"
+          class:active={i === heartbeat.breadcrumbs.length - 1}
+        >{crumb}</span>
+      {/each}
+    {/if}
   </div>
 
   <!-- VRAM badge (when known) -->
@@ -93,6 +98,19 @@
     text-overflow: ellipsis;
   }
   .crumb.active { color: #94a3b8; font-weight: 600; }
+  .sub-task {
+    font-size: 0.6875rem;
+    color: #facc15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-style: italic;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
   .vram-badge {
     font-size: 0.625rem;
     color: #475569;

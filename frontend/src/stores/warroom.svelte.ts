@@ -98,6 +98,25 @@ export function engineRoomMessages(): KotuiMessage[] {
 }
 
 /**
+ * Extracts the first meaningful line of thinking content from a streaming
+ * response for display in the HeartbeatBar as a live "sub-task" hint.
+ * Returns an empty string when no thinking is present or stream is empty.
+ */
+export function extractSubTask(stream: string): string {
+  if (!stream) return '';
+  const start = stream.indexOf('<think>');
+  if (start < 0) return '';
+  const after = stream.slice(start + 7);
+  for (const line of after.split('\n')) {
+    const t = line.trim();
+    if (t && t !== '</think>' && !t.startsWith('{') && t.length > 5) {
+      return t.length > 70 ? t.slice(0, 70) + '…' : t;
+    }
+  }
+  return '';
+}
+
+/**
  * Returns the display name for an agentID by looking up wr.agents.
  * Falls back to the raw agentID if no match is found.
  */

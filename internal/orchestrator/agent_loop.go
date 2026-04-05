@@ -449,8 +449,8 @@ Decide how to respond:
    - If it is ambiguous or could have unintended consequences, DO NOT guess or assume.
      Ask the Boss one specific clarifying question.
    - If it IS clear, decompose it into sub-tasks as a JSON array on ONE line, then briefly explain your plan.
-     Format: [{"id":"t1","title":"short title","description":"detail","assignee":"lead|specialist"},...]
-     Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; dependencies first.
+     Format: [{"id":"t1","title":"short title","description":"detail","assignee":"lead|specialist","justification":"one sentence — why this agent/approach for this task"},...]
+     Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; dependencies first; justification is mandatory and specific.
 2. Before making ANY tool call, output a confidence signal on its own line:
    {"confidence_score": <0.0–1.0>, "reason": "<why>"}
    - Score ≥ 0.7 → proceed with the tool call.

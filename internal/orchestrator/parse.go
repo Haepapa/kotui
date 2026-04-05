@@ -17,10 +17,11 @@ type EscalationSignal struct {
 
 // TaskItem is one sub-task in a Lead decomposition list.
 type TaskItem struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Assignee    string `json:"assignee"` // "lead" | "specialist"
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Description   string `json:"description"`
+	Assignee      string `json:"assignee"`      // "lead" | "specialist"
+	Justification string `json:"justification"` // why this agent/approach was chosen
 }
 
 // ConfidenceSignal is emitted by an agent on a dedicated line before a tool
