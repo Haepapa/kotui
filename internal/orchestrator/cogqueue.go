@@ -2,7 +2,11 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
+	"time"
+
+	"github.com/haepapa/kotui/internal/ollama"
 )
 
 // CogPriority is the scheduling tier for a cognition request.
@@ -58,6 +62,10 @@ type QueueState struct {
 // queue so that higher-priority calls (Boss DM, emergency) always run before
 // lower-priority background work. Only one request executes at a time.
 //
+// P3 (Background) requests are additionally gated by the SystemMonitor: if
+// the system is under CPU/RAM pressure the queue pauses P3 work until
+// pressure relieves (up to p3MaxPressureWait before giving up).
+//
 // The queue is safe for concurrent use. Start must be called once before
 // the first Submit.
 type CogQueue struct {
@@ -74,7 +82,15 @@ type CogQueue struct {
 	// onState is called after every enqueue/dequeue and active state
 	// change. May be nil. Used to emit kotui:queue_state events.
 	onState func(QueueState)
+
+	// sysmon is used to gate P3 requests under system pressure. May be nil
+	// (disables pressure throttling).
+	sysmon *ollama.SystemMonitor
 }
+
+// p3MaxPressureWait is the maximum time the queue will wait for pressure to
+// relieve before dropping a P3 request with an error.
+const p3MaxPressureWait = 60 * time.Second
 
 // NewCogQueue creates a stopped CogQueue. Call Start to begin dispatching.
 //
@@ -82,13 +98,17 @@ type CogQueue struct {
 // a kotui:queue_state event to the frontend. It is called synchronously from
 // the dispatcher goroutine; keep it non-blocking (e.g. fire-and-forget via a
 // goroutine or a buffered channel).
-func NewCogQueue(onState func(QueueState)) *CogQueue {
+//
+// sysmon, if non-nil, gates P3 requests: they pause while IsUnderPressure()
+// returns true. Pass nil to disable pressure throttling.
+func NewCogQueue(onState func(QueueState), sysmon *ollama.SystemMonitor) *CogQueue {
 	return &CogQueue{
 		p0:      make(chan cogRequest, 4),
 		p1:      make(chan cogRequest, 16),
 		p2:      make(chan cogRequest, 8),
 		p3:      make(chan cogRequest, 32),
 		onState: onState,
+		sysmon:  sysmon,
 	}
 }
 
@@ -173,6 +193,7 @@ func (q *CogQueue) emitState() {
 
 // run is the dispatcher goroutine. It dequeues and executes one request at a
 // time in strict priority order (P0 > P1 > P2 > P3).
+// P3 requests are additionally held until system pressure relieves.
 func (q *CogQueue) run(ctx context.Context) {
 	for {
 		req, ok := q.dequeue(ctx)
@@ -193,6 +214,20 @@ func (q *CogQueue) run(ctx context.Context) {
 			continue
 		}
 
+		// P3 pressure throttle: wait for system pressure to relieve before
+		// executing background tasks. Higher-priority items will have already
+		// been dequeued first (dequeue preserves strict priority).
+		if req.priority == P3Background && q.sysmon != nil && q.sysmon.IsUnderPressure() {
+			if err := q.waitPressureRelief(ctx, req.ctx); err != nil {
+				select {
+				case req.doneCh <- err:
+				default:
+				}
+				q.emitState()
+				continue
+			}
+		}
+
 		q.active.Store(true)
 		q.emitState()
 
@@ -208,6 +243,30 @@ func (q *CogQueue) run(ctx context.Context) {
 		default:
 		}
 	}
+}
+
+// waitPressureRelief blocks until the system pressure drops or the deadline
+// (p3MaxPressureWait) is reached. Uses exponential backoff starting at 500ms.
+// Returns an error if the deadline or a context is cancelled.
+func (q *CogQueue) waitPressureRelief(qCtx, reqCtx context.Context) error {
+	deadline := time.Now().Add(p3MaxPressureWait)
+	backoff := 500 * time.Millisecond
+	for q.sysmon.IsUnderPressure() {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("cogqueue: P3 request dropped — system under pressure for >%s", p3MaxPressureWait)
+		}
+		select {
+		case <-qCtx.Done():
+			return qCtx.Err()
+		case <-reqCtx.Done():
+			return reqCtx.Err()
+		case <-time.After(backoff):
+		}
+		if backoff < 8*time.Second {
+			backoff *= 2
+		}
+	}
+	return nil
 }
 
 // dequeue blocks until a request is available, returning the

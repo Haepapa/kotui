@@ -34,8 +34,9 @@ func NewVRAMCoordinatorForTest(profile models.VRAMProfile, inf Inferrer, leadMod
 
 // NewCogQueueForTest creates a CogQueue with an optional state callback.
 // The caller must call Start with an appropriate context before submitting.
+// sysmon is nil (pressure throttling disabled) in tests.
 func NewCogQueueForTest(onState func(QueueState)) *CogQueue {
-	return NewCogQueue(onState)
+	return NewCogQueue(onState, nil)
 }
 
 // ExportedCogPriorities exposes the priority constants for black-box tests.

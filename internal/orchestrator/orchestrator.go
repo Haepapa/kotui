@@ -157,7 +157,7 @@ func New(
 		vram:      vram,
 		escalator: escalator,
 		hiring:    hiringMgr,
-		cogQueue:  NewCogQueue(cfg.OnQueueState),
+		cogQueue:  NewCogQueue(cfg.OnQueueState, ollama.NewSystemMonitor()),
 	}
 
 	// Build memory store if embedder model is configured.
@@ -170,9 +170,11 @@ func New(
 		}
 	}
 
-	// Start the cognition queue. It runs for the lifetime of the process
-	// (background context) since there is no explicit orchestrator shutdown.
-	o.cogQueue.Start(context.Background())
+	// Start the cognition queue and system pressure monitor together.
+	// Both run for the lifetime of the process.
+	bgCtx := context.Background()
+	o.cogQueue.sysmon.Start(bgCtx)
+	o.cogQueue.Start(bgCtx)
 
 	return o, nil
 }

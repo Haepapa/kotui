@@ -4,10 +4,15 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/pkg/models"
 )
+
+// vramCoolingPeriod is the delay after parking the Lead model before a Worker
+// is loaded. Gives the GPU driver time to release memory.
+const vramCoolingPeriod = 500 * time.Millisecond
 
 // VRAMCoordinator manages model loading and unloading according to the
 // system's VRAM profile. In dual mode both Lead and Worker can coexist.
@@ -49,6 +54,9 @@ func (v *VRAMCoordinator) AcquireWorkerSlot(ctx context.Context) error {
 			v.queue <- struct{}{} // release slot on failure
 			return fmt.Errorf("vram: park lead: %w", err)
 		}
+		// Cooling period: give the GPU driver time to release memory before
+		// the next model is loaded.
+		time.Sleep(vramCoolingPeriod)
 	}
 	return nil
 }
