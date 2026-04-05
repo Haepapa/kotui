@@ -118,6 +118,10 @@ type WarRoomService struct {
 	chBatchMu      sync.Mutex
 	chBatchPending []string
 	chBatchRunning bool
+
+	// Identity registry — caches soul/persona/skills in memory so
+	// GetAgentBrainFiles never hits disk on a cache-warm read.
+	registry *agent.IdentityRegistry
 }
 
 // pendingDM holds a DM message that could not be processed because Ollama
@@ -150,6 +154,7 @@ func New(
 		cfgPath:             cfgPath,
 		companyIdentityPath: companyIdentityPath,
 		ollamaHealthy:       true, // optimistic default; corrected by first health check
+		registry:            agent.NewIdentityRegistry(),
 		heartbeat: HeartbeatState{
 			IsHealthy:   true,
 			Phase:       "Idle",
@@ -959,7 +964,10 @@ type BrainFiles struct {
 	Skills  string `json:"skills"`
 }
 
-// GetAgentBrainFiles reads the three editable brain files for the given agent.
+// GetAgentBrainFiles returns the three editable brain files for the given agent.
+// Results are served from the in-memory IdentityRegistry (cache-warm: no disk
+// I/O). The cache is invalidated whenever a file is saved or the agent updates
+// its own brain via the update_self tool, so callers always see current content.
 // If the brain files don't exist yet (e.g. first run before first chat), they
 // are initialised with defaults so the panel always has content to show.
 func (s *WarRoomService) GetAgentBrainFiles(ctx context.Context, agentID string) (BrainFiles, error) {
@@ -979,23 +987,15 @@ func (s *WarRoomService) GetAgentBrainFiles(ctx context.Context, agentID string)
 		return BrainFiles{}, fmt.Errorf("ensure brain files: %w", err)
 	}
 
-	soul, err := os.ReadFile(paths.SoulPath)
+	// Serve from in-memory cache; loads from disk on first access or after invalidation.
+	cached, err := s.registry.Get(paths, agentID)
 	if err != nil {
-		return BrainFiles{}, fmt.Errorf("read soul.md: %w", err)
+		return BrainFiles{}, err
 	}
-	persona, err := os.ReadFile(paths.PersonaPath)
-	if err != nil {
-		return BrainFiles{}, fmt.Errorf("read persona.md: %w", err)
-	}
-	skills, err := os.ReadFile(paths.SkillsPath)
-	if err != nil {
-		return BrainFiles{}, fmt.Errorf("read skills.md: %w", err)
-	}
-
 	return BrainFiles{
-		Soul:    string(soul),
-		Persona: string(persona),
-		Skills:  string(skills),
+		Soul:    cached.Soul,
+		Persona: cached.Persona,
+		Skills:  cached.Skills,
 	}, nil
 }
 
@@ -1021,6 +1021,9 @@ func (s *WarRoomService) SaveAgentBrainFile(ctx context.Context, agentID, fileKe
 	if err := os.WriteFile(targetPath, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("save %s.md: %w", fileKey, err)
 	}
+
+	// Invalidate the registry so the next GetAgentBrainFiles re-reads from disk.
+	s.registry.Invalidate(agentID)
 
 	// Recompose instruction.md from the updated source files.
 	if s.orch != nil {
@@ -1049,6 +1052,10 @@ func (s *WarRoomService) SaveAgentBrainFile(ctx context.Context, agentID, fileKe
 // Called both from SaveAgentBrainFile (user-initiated) and from the update_self
 // MCP tool callback (agent-initiated).
 func (s *WarRoomService) EmitBrainUpdate(ctx context.Context, agentID, file, summary string) {
+	// Invalidate the registry whenever any brain file is written — both user-
+	// initiated saves and agent-initiated update_self calls flow through here.
+	s.registry.Invalidate(agentID)
+
 	convID, _ := s.db.GetDMConversation(ctx, agentID)
 
 	note := fmt.Sprintf("🧠 Brain updated · **%s.md**", file)

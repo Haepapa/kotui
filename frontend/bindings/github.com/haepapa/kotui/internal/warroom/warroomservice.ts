@@ -80,7 +80,10 @@ export function GetActiveConversation(): $CancellablePromise<string> {
 }
 
 /**
- * GetAgentBrainFiles reads the three editable brain files for the given agent.
+ * GetAgentBrainFiles returns the three editable brain files for the given agent.
+ * Results are served from the in-memory IdentityRegistry (cache-warm: no disk
+ * I/O). The cache is invalidated whenever a file is saved or the agent updates
+ * its own brain via the update_self tool, so callers always see current content.
  * If the brain files don't exist yet (e.g. first run before first chat), they
  * are initialised with defaults so the panel always has content to show.
  */
