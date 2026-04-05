@@ -20,6 +20,8 @@
   let scrollEl = $state<HTMLDivElement | null>(null);
   let inputEl = $state<HTMLTextAreaElement | null>(null);
   let copiedKey = $state('');
+  // Ref to the streaming think-body so we can auto-scroll it to the bottom.
+  let streamThinkEl = $state<HTMLDivElement | null>(null);
 
   $effect(() => {
     // Auto-scroll to bottom when messages change
@@ -35,19 +37,30 @@
     }
   });
 
+  // Auto-scroll the streaming think-body to the bottom so the user always
+  // sees the latest thinking tokens as they arrive.
+  $effect(() => {
+    if (streamThinkEl && streamParsed.thinking) {
+      streamThinkEl.scrollTop = streamThinkEl.scrollHeight;
+    }
+  });
+
   // Parse <think>...</think> blocks from streamed/full content.
-  function parseThink(content: string): { thinking: string; response: string } {
-    // The think block may still be open while streaming (no closing tag yet).
+  // Returns an `inThink` flag that is true when a <think> block has opened but
+  // not yet closed — used to suppress the raw-content fallback bubble while
+  // the model is still producing thinking tokens.
+  function parseThink(content: string): { thinking: string; response: string; inThink: boolean } {
+    // Closed (complete) think block followed by the real response.
     const closedMatch = content.match(/^<think>([\s\S]*?)<\/think>\s*/);
     if (closedMatch) {
-      return { thinking: closedMatch[1].trim(), response: content.slice(closedMatch[0].length) };
+      return { thinking: closedMatch[1].trim(), response: content.slice(closedMatch[0].length), inThink: false };
     }
-    // Open/incomplete think block (still streaming).
+    // Open/incomplete think block — still streaming thinking tokens.
     const openMatch = content.match(/^<think>([\s\S]*)/);
     if (openMatch) {
-      return { thinking: openMatch[1].trim(), response: '' };
+      return { thinking: openMatch[1].trim(), response: '', inThink: true };
     }
-    return { thinking: '', response: content };
+    return { thinking: '', response: content, inThink: false };
   }
 
   // Extract thinking from a stored message's metadata JSON field.
@@ -261,17 +274,22 @@
             <span class="bubble-sender">{streamAgentName}</span>
             <span class="streaming-badge">streaming…</span>
           </div>
-          {#if streamParsed.thinking}
+          <!-- Thinking block: shown whenever <think> has been opened, even if
+               no content has arrived yet (prevents raw tag flash in bubble).
+               Stays open and auto-scrolls to the bottom while streaming. -->
+          {#if streamParsed.thinking || streamParsed.inThink}
             <details class="think-block" open>
               <summary class="think-summary">thinking…</summary>
-              <div class="think-body">{streamParsed.thinking}</div>
+              <div class="think-body" bind:this={streamThinkEl}>{streamParsed.thinking}</div>
             </details>
           {/if}
+          <!-- Response bubble: shown once the model moves past the think block. -->
           {#if streamParsed.response}
             <div class="bubble bubble-agent">
               <p class="bubble-text">{streamParsed.response}</p>
             </div>
-          {:else if !streamParsed.thinking}
+          {:else if !streamParsed.inThink && !streamParsed.thinking}
+            <!-- No thinking at all — plain streaming response. -->
             <div class="bubble bubble-agent">
               <p class="bubble-text">{streamContent}</p>
             </div>
