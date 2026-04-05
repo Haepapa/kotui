@@ -46,21 +46,29 @@
   });
 
   // Parse <think>...</think> blocks from streamed/full content.
+  // Mirrors the Go extractThinkBlocks logic: searches for <think> anywhere in
+  // the content (not anchored to start) so preamble tokens before the tag don't
+  // break detection. Any text before <think> is silently discarded — it is
+  // model preamble that should not appear in the response bubble.
   // Returns an `inThink` flag that is true when a <think> block has opened but
   // not yet closed — used to suppress the raw-content fallback bubble while
   // the model is still producing thinking tokens.
   function parseThink(content: string): { thinking: string; response: string; inThink: boolean } {
-    // Closed (complete) think block followed by the real response.
-    const closedMatch = content.match(/^<think>([\s\S]*?)<\/think>\s*/);
-    if (closedMatch) {
-      return { thinking: closedMatch[1].trim(), response: content.slice(closedMatch[0].length), inThink: false };
+    const openIdx = content.indexOf('<think>');
+    if (openIdx === -1) {
+      // No think block present at all — plain response.
+      return { thinking: '', response: content, inThink: false };
     }
-    // Open/incomplete think block — still streaming thinking tokens.
-    const openMatch = content.match(/^<think>([\s\S]*)/);
-    if (openMatch) {
-      return { thinking: openMatch[1].trim(), response: '', inThink: true };
+    const afterOpen = content.slice(openIdx + 7); // skip '<think>'
+    const closeIdx = afterOpen.indexOf('</think>');
+    if (closeIdx === -1) {
+      // Think block opened but not yet closed — still streaming thinking tokens.
+      return { thinking: afterOpen.trim(), response: '', inThink: true };
     }
-    return { thinking: '', response: content, inThink: false };
+    // Complete think block: extract thinking and the response that follows.
+    const thinking = afterOpen.slice(0, closeIdx).trim();
+    const response = afterOpen.slice(closeIdx + 8).trimStart(); // skip '</think>'
+    return { thinking, response, inThink: false };
   }
 
   // Extract thinking from a stored message's metadata JSON field.
