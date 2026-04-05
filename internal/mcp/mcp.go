@@ -35,6 +35,31 @@ type ToolDef struct {
 	Handler     Handler `json:"-"`
 }
 
+// MCPError is a rich error returned by tool handlers. It carries a
+// recoverability flag and an actionable suggestion so the executor can decide
+// whether to keep retrying and so the agent can self-correct.
+type MCPError struct {
+	// IsRecoverable indicates whether the agent could fix this by changing its
+	// approach (e.g. wrong path → list first). Non-recoverable errors (e.g.
+	// permission denied) skip remaining retries and escalate immediately.
+	IsRecoverable bool
+	// Suggestion is a short, actionable instruction for the agent, e.g.
+	// "Use operation=list to find the correct filename first."
+	Suggestion string
+	// Underlying is the raw OS/library error.
+	Underlying error
+}
+
+func (e *MCPError) Error() string {
+	base := e.Underlying.Error()
+	if e.Suggestion != "" {
+		return base + " — " + e.Suggestion
+	}
+	return base
+}
+
+func (e *MCPError) Unwrap() error { return e.Underlying }
+
 // EscalationError is returned when a tool handler fails after all retries.
 // The orchestrator must pause the parent task and notify the Boss.
 type EscalationError struct {

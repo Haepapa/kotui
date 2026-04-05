@@ -34,6 +34,13 @@ type WorkerResult struct {
 	IsError bool
 }
 
+const recoveryProtocol = "\n## Recovery Protocol\n\n" +
+	"When a tool returns an error, follow these steps **before escalating**:\n\n" +
+	"1. **Read the error message carefully** — it contains a *Suggestion* explaining how to fix the issue.\n" +
+	"2. **Attempt the suggested fix once** (e.g. use `operation=list` to find the correct file path, then retry with the correct path).\n" +
+	"3. Only escalate to the Lead if the fix attempt also fails or if the error states it is *not recoverable*.\n" +
+	"4. Never retry an identical call that already failed — always change your approach based on the Suggestion.\n"
+
 // spawnWorker creates a new Specialist RunningAgent for a single task.
 // The caller must call vram.AcquireWorkerSlot before invoking this.
 func spawnWorker(
@@ -52,7 +59,7 @@ func spawnWorker(
 		ProjectID:           job.ProjectID,
 		DataDir:             cfg.DataDir,
 		CompanyIdentityPath: cfg.CompanyIdentityPath,
-		MCPFragment:         mcpEng.SystemPromptFragment(models.ClearanceSpecialist),
+		MCPFragment:         mcpEng.SystemPromptFragment(models.ClearanceSpecialist) + recoveryProtocol,
 		PastExperience:      job.PastExperience,
 	})
 	if err != nil {

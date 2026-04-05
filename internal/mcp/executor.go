@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/haepapa/kotui/pkg/models"
@@ -62,6 +63,21 @@ func (e *Executor) execute(ctx context.Context, clearance models.Clearance, call
 			}, nil
 		}
 		lastErr = err
+
+		// For MCPErrors: include the suggestion in the result so the agent
+		// can read it and self-correct.  Non-recoverable errors skip remaining
+		// retries immediately — there is nothing the executor can do.
+		var mcpErr *MCPError
+		if errors.As(err, &mcpErr) && !mcpErr.IsRecoverable {
+			escErr := &EscalationError{ToolName: call.ToolName, Attempts: attempt, Last: lastErr}
+			return models.ToolResult{
+				CallID:   call.ID,
+				ToolName: call.ToolName,
+				Output:   escErr.Error(),
+				IsError:  true,
+				Attempts: attempt,
+			}, escErr
+		}
 	}
 
 	// All attempts exhausted.

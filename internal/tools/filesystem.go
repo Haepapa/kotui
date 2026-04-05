@@ -73,6 +73,20 @@ func filesystemHandler(box *mcp.Sandbox, onFileWrite func(string)) mcp.Handler {
 func fsRead(resolved, displayPath string) (string, error) {
 	data, err := os.ReadFile(resolved)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: true,
+				Suggestion:    "The file does not exist. Use operation=list to discover available files, then retry with the correct path.",
+				Underlying:    fmt.Errorf("filesystem: read %s: %w", displayPath, err),
+			}
+		}
+		if os.IsPermission(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: false,
+				Suggestion:    "Permission denied reading this file — cannot proceed.",
+				Underlying:    fmt.Errorf("filesystem: read %s: %w", displayPath, err),
+			}
+		}
 		return "", fmt.Errorf("filesystem: read %s: %w", displayPath, err)
 	}
 	return string(data), nil
@@ -80,9 +94,23 @@ func fsRead(resolved, displayPath string) (string, error) {
 
 func fsWrite(resolved, displayPath, content string, onFileWrite func(string)) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(resolved), 0o755); err != nil {
+		if os.IsPermission(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: false,
+				Suggestion:    "Permission denied creating directories — cannot write to this location.",
+				Underlying:    fmt.Errorf("filesystem: mkdir for %s: %w", displayPath, err),
+			}
+		}
 		return "", fmt.Errorf("filesystem: mkdir for %s: %w", displayPath, err)
 	}
 	if err := os.WriteFile(resolved, []byte(content), 0o644); err != nil {
+		if os.IsPermission(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: false,
+				Suggestion:    "Permission denied writing this file — try a different path inside the workspace.",
+				Underlying:    fmt.Errorf("filesystem: write %s: %w", displayPath, err),
+			}
+		}
 		return "", fmt.Errorf("filesystem: write %s: %w", displayPath, err)
 	}
 	if onFileWrite != nil {
@@ -98,6 +126,20 @@ func fsDelete(box *mcp.Sandbox, resolved, displayPath string) (string, error) {
 		_ = os.WriteFile(backupPath, data, 0o644)
 	}
 	if err := os.Remove(resolved); err != nil {
+		if os.IsNotExist(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: true,
+				Suggestion:    "The file does not exist. Use operation=list to verify the path before deleting.",
+				Underlying:    fmt.Errorf("filesystem: delete %s: %w", displayPath, err),
+			}
+		}
+		if os.IsPermission(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: false,
+				Suggestion:    "Permission denied deleting this file.",
+				Underlying:    fmt.Errorf("filesystem: delete %s: %w", displayPath, err),
+			}
+		}
 		return "", fmt.Errorf("filesystem: delete %s: %w", displayPath, err)
 	}
 	return fmt.Sprintf("deleted %s (backup saved to %s)", displayPath, backupPath), nil
@@ -106,6 +148,20 @@ func fsDelete(box *mcp.Sandbox, resolved, displayPath string) (string, error) {
 func fsList(resolved, displayPath string) (string, error) {
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: true,
+				Suggestion:    "The directory does not exist. Try listing the workspace root (use path=.) to find available directories.",
+				Underlying:    fmt.Errorf("filesystem: list %s: %w", displayPath, err),
+			}
+		}
+		if os.IsPermission(err) {
+			return "", &mcp.MCPError{
+				IsRecoverable: false,
+				Suggestion:    "Permission denied listing this directory.",
+				Underlying:    fmt.Errorf("filesystem: list %s: %w", displayPath, err),
+			}
+		}
 		return "", fmt.Errorf("filesystem: list %s: %w", displayPath, err)
 	}
 	var lines []string

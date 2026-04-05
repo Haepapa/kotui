@@ -116,10 +116,37 @@ func shellHandler(box *mcp.Sandbox) mcp.Handler {
 
 		if runErr != nil {
 			exitMsg := fmt.Sprintf("command failed: %v", runErr)
+			combinedOutput := output
 			if output != "" {
-				return "", fmt.Errorf("%s\n%s", exitMsg, output)
+				exitMsg = fmt.Sprintf("%s\n%s", exitMsg, output)
 			}
-			return "", fmt.Errorf("%s", exitMsg)
+
+			// Classify common recoverable vs non-recoverable shell errors.
+			lowerOut := strings.ToLower(combinedOutput + runErr.Error())
+			switch {
+			case strings.Contains(lowerOut, "command not found") ||
+				strings.Contains(lowerOut, "no such file or directory") && strings.Contains(lowerOut, "exec"):
+				return "", &mcp.MCPError{
+					IsRecoverable: true,
+					Suggestion:    "The command was not found. Check whether the tool is installed or use an alternative command.",
+					Underlying:    fmt.Errorf("%s", exitMsg),
+				}
+			case strings.Contains(lowerOut, "permission denied"):
+				return "", &mcp.MCPError{
+					IsRecoverable: false,
+					Suggestion:    "Permission denied running this command — cannot proceed.",
+					Underlying:    fmt.Errorf("%s", exitMsg),
+				}
+			case strings.Contains(lowerOut, "context deadline exceeded") ||
+				strings.Contains(lowerOut, "signal: killed"):
+				return "", &mcp.MCPError{
+					IsRecoverable: true,
+					Suggestion:    "The command timed out. Try increasing timeout_seconds or breaking it into smaller steps.",
+					Underlying:    fmt.Errorf("%s", exitMsg),
+				}
+			default:
+				return "", fmt.Errorf("%s", exitMsg)
+			}
 		}
 
 		if output == "" {
