@@ -224,6 +224,23 @@
             {/if}
           </button>
         </div>
+      {:else if msg.kind === 'consultation'}
+        <!-- Consultation bubble — amber, agent seeking clarification -->
+        <div class="row row-agent">
+          <div class="avatar avatar-consult" title={senderName(msg)}>
+            {avatarInitials(senderName(msg))}
+          </div>
+          <div class="agent-bubble-wrap">
+            <div class="bubble-meta">
+              <span class="bubble-sender">{senderName(msg)}</span>
+              <span class="consult-badge">needs clarification</span>
+              <span class="bubble-time">{formatTime(msg.created_at)}</span>
+            </div>
+            <div class="bubble bubble-consult">
+              <p class="bubble-text">{msg.content}</p>
+            </div>
+          </div>
+        </div>
       {:else}
         <!-- Agent bubble — left aligned -->
         <div class="row row-agent">
@@ -436,6 +453,26 @@
   .bubble-agent.tool {
     background: var(--bubble-tool-bg);
     border-color: var(--bubble-tool-border);
+  }
+  /* Consultation bubble — amber, agent is seeking clarification */
+  .bubble-consult {
+    background: color-mix(in srgb, #f59e0b 12%, transparent);
+    border: 1px solid color-mix(in srgb, #f59e0b 40%, transparent);
+    border-bottom-left-radius: 4px;
+    color: var(--bubble-agent-text);
+  }
+  .avatar-consult {
+    background: color-mix(in srgb, #f59e0b 25%, var(--bg-surface));
+    border: 1px solid color-mix(in srgb, #f59e0b 50%, transparent);
+    color: #d97706;
+  }
+  .consult-badge {
+    font-size: 0.6875rem;
+    color: #d97706;
+    background: color-mix(in srgb, #f59e0b 15%, transparent);
+    border-radius: 3px;
+    padding: 0.1rem 0.35rem;
+    letter-spacing: 0.04em;
   }
   .bubble-text {
     font-size: 1rem;

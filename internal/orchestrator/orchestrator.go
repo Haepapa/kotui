@@ -236,6 +236,18 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	decomposed, err := o.lead.TurnStream(ctx, augmented, onChunk)
 	o.lead.OnRaw = nil
 	if err != nil {
+		var lcErr *LowConfidenceError
+		if errors.As(err, &lcErr) {
+			o.disp.DispatchSummary(models.Message{
+				ProjectID:      o.projectID,
+				ConversationID: o.convID,
+				Kind:           models.KindConsultation,
+				Tier:           models.TierSummary,
+				AgentID:        "lead",
+				Content:        consultationContent("Lead", lcErr.Score, lcErr.Reason),
+			})
+			return nil
+		}
 		var escErr *EscalationNeededError
 		if errors.As(err, &escErr) {
 			return o.handleEscalation(ctx, escErr, command)
@@ -424,6 +436,19 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 
 		response, err := ra.TurnStream(watchdogCtx, augmented, onChunk)
 		if err != nil {
+			// Low confidence: agent needs clarification — surface to the Boss, not as an error.
+			var lcErr *LowConfidenceError
+			if errors.As(err, &lcErr) {
+				o.disp.Dispatch(models.Message{
+					ProjectID:      o.projectID,
+					ConversationID: convID,
+					AgentID:        agentID,
+					Kind:           models.KindConsultation,
+					Tier:           models.TierSummary,
+					Content:        consultationContent(agentID, lcErr.Score, lcErr.Reason),
+				})
+				return nil
+			}
 			return fmt.Errorf("dm %s: %w", agentID, err)
 		}
 
@@ -504,6 +529,13 @@ func thinkingMeta(thinking string) string {
 		return "{}"
 	}
 	return string(b)
+}
+
+// consultationContent formats the content of a KindConsultation message
+// shown to the Boss when an agent's confidence score falls below threshold.
+func consultationContent(agentID string, score float64, reason string) string {
+	return fmt.Sprintf("❓ **%s** needs clarification before proceeding (confidence: %d%%).\n\n%s",
+		agentID, int(score*100), reason)
 }
 
 // CultureBroadcast forces a full context reset on all active agents.

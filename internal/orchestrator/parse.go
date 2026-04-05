@@ -23,7 +23,34 @@ type TaskItem struct {
 	Assignee    string `json:"assignee"` // "lead" | "specialist"
 }
 
-// parseToolCall scans text for a valid MCP tool call in the format:
+// ConfidenceSignal is emitted by an agent on a dedicated line before a tool
+// call to assert how certain it is about the planned action.
+// CS ≥ 0.7: proceed. CS < 0.7: orchestrator surfaces a consultation request.
+type ConfidenceSignal struct {
+	ConfidenceScore float64 `json:"confidence_score"`
+	Reason          string  `json:"reason"`
+}
+
+// parseConfidenceSignal scans response lines for a confidence signal emitted
+// per the handbook Confidence Assessment protocol.  Uses a fast
+// strings.Contains pre-check to avoid JSON parsing on every line.
+// Returns nil if no signal is found.
+func parseConfidenceSignal(text string) *ConfidenceSignal {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") || !strings.Contains(line, "confidence_score") {
+			continue
+		}
+		var sig ConfidenceSignal
+		if err := json.Unmarshal([]byte(line), &sig); err != nil {
+			continue
+		}
+		return &sig
+	}
+	return nil
+}
+
+
 //
 //	{"tool": "name", "args": {...}}
 //
@@ -195,6 +222,7 @@ func parseTaskList(text string) []TaskItem {
 
 // stripToolCallLines removes all detected tool call lines from a response so
 // only the human-readable prose remains for display.
+// Also strips confidence signal lines and escalation lines.
 func stripToolCallLines(text string) string {
 	var out []string
 	for _, line := range strings.Split(text, "\n") {
@@ -206,6 +234,9 @@ func stripToolCallLines(text string) string {
 					continue
 				}
 				if esc, _ := probe["escalation_needed"].(bool); esc {
+					continue
+				}
+				if _, hasCS := probe["confidence_score"]; hasCS {
 					continue
 				}
 			}

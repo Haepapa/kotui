@@ -516,3 +516,102 @@ func TestCogQueue_StateReflectsWaiting(t *testing.T) {
 		t.Error("expected Active=false after completion")
 	}
 }
+
+// --- Confidence Signal parsing -------------------------------------------
+
+func TestParseConfidenceSignal_Hit(t *testing.T) {
+text := `Some prose before.
+{"confidence_score": 0.85, "reason": "All files confirmed"}
+Some prose after.`
+sig := orchestrator.ExportedParseConfidenceSignal(text)
+if sig == nil {
+t.Fatal("expected signal, got nil")
+}
+if sig.ConfidenceScore != 0.85 {
+t.Errorf("score = %v, want 0.85", sig.ConfidenceScore)
+}
+if sig.Reason != "All files confirmed" {
+t.Errorf("reason = %q", sig.Reason)
+}
+}
+
+func TestParseConfidenceSignal_Miss(t *testing.T) {
+text := `{"tool": "file_manager", "args": {"op": "read", "path": "x"}}`
+if sig := orchestrator.ExportedParseConfidenceSignal(text); sig != nil {
+t.Errorf("expected nil for non-confidence JSON, got %+v", sig)
+}
+}
+
+func TestParseConfidenceSignal_LowThreshold(t *testing.T) {
+text := `{"confidence_score": 0.45, "reason": "path is ambiguous"}`
+sig := orchestrator.ExportedParseConfidenceSignal(text)
+if sig == nil {
+t.Fatal("expected signal")
+}
+if sig.ConfidenceScore >= 0.7 {
+t.Errorf("expected score < 0.7, got %v", sig.ConfidenceScore)
+}
+}
+
+func TestParseConfidenceSignal_HighThreshold(t *testing.T) {
+text := `{"confidence_score": 0.95, "reason": "clear instructions"}`
+sig := orchestrator.ExportedParseConfidenceSignal(text)
+if sig == nil {
+t.Fatal("expected signal")
+}
+if sig.ConfidenceScore < 0.7 {
+t.Errorf("expected score >= 0.7, got %v", sig.ConfidenceScore)
+}
+}
+
+func TestParseConfidenceSignal_Empty(t *testing.T) {
+if sig := orchestrator.ExportedParseConfidenceSignal(""); sig != nil {
+t.Errorf("expected nil for empty string, got %+v", sig)
+}
+}
+
+// --- LowConfidenceError via TurnStream -----------------------------------
+
+func TestTurnStream_LowConfidenceReturnsError(t *testing.T) {
+	inf := &mockInferrer{response: `{"confidence_score": 0.55, "reason": "path is unclear"}`}
+	ra := orchestrator.NewRunningAgentForTest("lead", "Lead", "model", 2, inf, nil)
+	_, err := ra.TurnStream(context.Background(), "do something risky", nil)
+	if err == nil {
+		t.Fatal("expected LowConfidenceError, got nil")
+	}
+	var lcErr *orchestrator.ExportedLowConfidenceError
+	if !errors.As(err, &lcErr) {
+		t.Fatalf("expected *LowConfidenceError, got %T: %v", err, err)
+	}
+	if lcErr.Score >= 0.7 {
+		t.Errorf("score = %v, expected < 0.7", lcErr.Score)
+	}
+	if lcErr.Reason != "path is unclear" {
+		t.Errorf("reason = %q", lcErr.Reason)
+	}
+}
+
+func TestTurnStream_HighConfidenceProceedsNormally(t *testing.T) {
+	inf := &mockInferrer{response: "{\"confidence_score\": 0.9, \"reason\": \"clear\"}\nHello, done."}
+	ra := orchestrator.NewRunningAgentForTest("lead", "Lead", "model", 2, inf, nil)
+	resp, err := ra.TurnStream(context.Background(), "say hello", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == "" {
+		t.Error("expected non-empty response")
+	}
+}
+
+// --- stripToolCallLines strips confidence signal lines -------------------
+
+func TestStripToolCallLines_StripsConfidenceSignal(t *testing.T) {
+text := "Here is my plan.\n{\"confidence_score\": 0.8, \"reason\": \"ok\"}\nProceed."
+stripped := orchestrator.ExportedStripToolCallLines(text)
+if strings.Contains(stripped, "confidence_score") {
+t.Errorf("confidence signal not stripped: %q", stripped)
+}
+if !strings.Contains(stripped, "Here is my plan") {
+t.Errorf("prose stripped incorrectly: %q", stripped)
+}
+}

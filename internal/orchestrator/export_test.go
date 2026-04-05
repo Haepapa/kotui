@@ -13,6 +13,10 @@ var ExportedParseToolCall = parseToolCall
 var ExportedParseEscalation = parseEscalation
 var ExportedParseTaskList = parseTaskList
 var ExportedStripToolCallLines = stripToolCallLines
+var ExportedParseConfidenceSignal = parseConfidenceSignal
+
+// ExportedLowConfidenceError allows tests to inspect the error type.
+type ExportedLowConfidenceError = LowConfidenceError
 
 // NewRunningAgentForTest creates a RunningAgent directly for unit testing,
 // bypassing the need for a real agent.Agent and filesystem.

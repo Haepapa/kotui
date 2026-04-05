@@ -48,13 +48,14 @@ const (
 type MessageKind string
 
 const (
-	KindBossCommand MessageKind = "boss_command"
+	KindBossCommand  MessageKind = "boss_command"
 	KindAgentMessage MessageKind = "agent_message"
-	KindToolCall    MessageKind = "tool_call"
-	KindToolResult  MessageKind = "tool_result"
-	KindMilestone   MessageKind = "milestone"
-	KindSystemEvent MessageKind = "system_event"
-	KindDraft       MessageKind = "draft" // Lead-internal, not shown to Boss
+	KindToolCall     MessageKind = "tool_call"
+	KindToolResult   MessageKind = "tool_result"
+	KindMilestone    MessageKind = "milestone"
+	KindSystemEvent  MessageKind = "system_event"
+	KindDraft        MessageKind = "draft"        // Lead-internal, not shown to Boss
+	KindConsultation MessageKind = "consultation" // Agent seeking clarification (CS < 0.7)
 )
 
 // Clearance represents an agent's permission tier within the MCP framework.

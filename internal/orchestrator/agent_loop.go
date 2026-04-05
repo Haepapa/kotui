@@ -48,6 +48,19 @@ func (ra *RunningAgent) rawLog(kind models.MessageKind, content string) {
 // boolPtr returns a pointer to the given bool — used for optional JSON fields.
 func boolPtr(b bool) *bool { return &b }
 
+// LowConfidenceError is returned by Turn/TurnStream when the agent emits a
+// confidence signal with CS < 0.7. The caller should surface a consultation
+// message to the Boss rather than treating this as a hard error.
+type LowConfidenceError struct {
+	AgentID string
+	Score   float64
+	Reason  string
+}
+
+func (e *LowConfidenceError) Error() string {
+	return fmt.Sprintf("agent %s: low confidence (%.0f%%): %s", e.AgentID, e.Score*100, e.Reason)
+}
+
 // newRunningAgent creates a RunningAgent from a spawned agent.Agent.
 func newRunningAgent(
 	agentID, name, model string,
@@ -114,6 +127,12 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 		ra.LastThinking = thinkContent
 		if thinkContent != "" {
 			ra.rawLog(models.KindSystemEvent, "💭 thinking:\n"+thinkContent)
+		}
+
+		// Check confidence signal: if CS < 0.7 stop and surface a consultation.
+		if cs := parseConfidenceSignal(response); cs != nil && cs.ConfidenceScore < 0.7 {
+			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("🔍 low confidence (%.0f%%): %s", cs.ConfidenceScore*100, cs.Reason))
+			return "", &LowConfidenceError{AgentID: ra.AgentID, Score: cs.ConfidenceScore, Reason: cs.Reason}
 		}
 
 		// Check for escalation signal first.
@@ -258,6 +277,12 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 		ra.LastThinking = thinkContent
 		if thinkContent != "" {
 			ra.rawLog(models.KindSystemEvent, "💭 thinking:\n"+thinkContent)
+		}
+
+		// Check confidence signal: if CS < 0.7 stop and surface a consultation.
+		if cs := parseConfidenceSignal(response); cs != nil && cs.ConfidenceScore < 0.7 {
+			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("🔍 low confidence (%.0f%%): %s", cs.ConfidenceScore*100, cs.Reason))
+			return "", &LowConfidenceError{AgentID: ra.AgentID, Score: cs.ConfidenceScore, Reason: cs.Reason}
 		}
 
 		if sig := parseEscalation(response); sig != nil {

@@ -166,6 +166,11 @@ export enum MessageKind {
      * Lead-internal, not shown to Boss
      */
     KindDraft = "draft",
+
+    /**
+     * Agent seeking clarification (CS < 0.7)
+     */
+    KindConsultation = "consultation",
 };
 
 /**
