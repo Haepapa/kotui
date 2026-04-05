@@ -90,6 +90,9 @@ type Orchestrator struct {
 	// optimizer runs periodic journal reviews and proposes handbook amendments.
 	optimizer *LeadOptimizer
 
+	// curiosity runs a Watchman critic pass after every CuriosityThreshold tasks.
+	curiosity *CuriosityLoop
+
 	projectID string
 	convID    string
 }
@@ -217,6 +220,10 @@ func New(
 			},
 		)
 	}
+
+	// CuriosityLoop: always active — fires a Watchman critic pass every
+	// CuriosityThreshold completed specialist tasks.
+	o.curiosity = newCuriosityLoop(cfg, inferrer, o.mcpEng, o.disp, log)
 
 	return o, nil
 }
@@ -397,6 +404,9 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 		}
 		if !result.IsError && o.optimizer != nil {
 			o.optimizer.NotifyTaskDone(o.projectID)
+		}
+		if !result.IsError {
+			o.curiosity.NotifyTaskDone(o.projectID, o.convID)
 		}
 		_ = result
 	}

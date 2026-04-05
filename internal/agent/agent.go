@@ -127,7 +127,7 @@ func RoleClearance(role models.AgentRole) models.Clearance {
 	switch role {
 	case models.RoleLead:
 		return models.ClearanceLead
-	case models.RoleSpecialist:
+	case models.RoleSpecialist, models.RoleWatchman:
 		return models.ClearanceSpecialist
 	default:
 		return models.ClearanceTrial

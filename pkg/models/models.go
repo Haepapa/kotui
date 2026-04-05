@@ -19,7 +19,8 @@ type AgentRole string
 const (
 	RoleLead       AgentRole = "lead"
 	RoleSpecialist AgentRole = "specialist"
-	RoleTrial      AgentRole = "trial" // sandbox candidates during hiring
+	RoleTrial      AgentRole = "trial"     // sandbox candidates during hiring
+	RoleWatchman   AgentRole = "watchman"  // project critic; fired by CuriosityLoop
 )
 
 // AgentStatus represents the current lifecycle state of an agent.

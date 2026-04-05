@@ -708,3 +708,27 @@ t.Errorf("prompt missing %q", want)
 }
 }
 }
+
+// --- CuriosityLoop -------------------------------------------------------
+
+func TestCuriosityLoop_ThresholdConstant(t *testing.T) {
+	if orchestrator.ExportedCuriosityThreshold <= 0 {
+		t.Errorf("CuriosityThreshold must be > 0, got %d", orchestrator.ExportedCuriosityThreshold)
+	}
+}
+
+func TestParseReflectionResponse_EmptyBlocks(t *testing.T) {
+	// Blank UPDATE blocks should produce empty strings.
+	resp := `UPDATE_SOUL:
+END_UPDATE_SOUL
+
+UPDATE_PERSONA:
+END_UPDATE_PERSONA`
+	soul, persona := orchestrator.ExportedParseReflectionResponse(resp)
+	if soul != "" {
+		t.Errorf("expected empty soul, got %q", soul)
+	}
+	if persona != "" {
+		t.Errorf("expected empty persona, got %q", persona)
+	}
+}

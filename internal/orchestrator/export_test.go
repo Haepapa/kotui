@@ -17,6 +17,17 @@ var ExportedParseConfidenceSignal = parseConfidenceSignal
 var ExportedParseReflectionResponse = parseReflectionResponse
 var ExportedBuildReflectionPrompt = buildReflectionPrompt
 
+// ExportedCuriosityThreshold exposes the threshold constant for tests.
+const ExportedCuriosityThreshold = CuriosityThreshold
+
+// CuriosityTasksDone reads the current task counter from a CuriosityLoop
+// for unit testing without triggering real inference.
+func CuriosityTasksDone(cl *CuriosityLoop) int {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	return cl.tasksDone
+}
+
 // ExportedLowConfidenceError allows tests to inspect the error type.
 type ExportedLowConfidenceError = LowConfidenceError
 
