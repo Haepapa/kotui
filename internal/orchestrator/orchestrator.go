@@ -57,6 +57,10 @@ type OrchestratorConfig struct {
 	// Optimizer creates a new handbook proposal approval. The projectID
 	// identifies which project's pending approval queue should be refreshed.
 	OnApproval func(projectID string)
+
+	// SudoGate, if non-nil, enables the Boss-approval workflow for sudo commands.
+	// When nil, sudo commands are hard-blocked.
+	SudoGate *tools.SudoGate
 }
 type Orchestrator struct {
 	cfg     OrchestratorConfig
@@ -116,12 +120,14 @@ func New(
 
 	// Use a dispatchRef indirection so the file-write hook can reference the
 	// orchestrator (o) even though it is created after tool registration.
+	// Same pattern for memRef: the memory store is built after registration.
 	var dispatchFileWrite func(path string)
+	var memRef *memory.Store // set after o.memory is built
 	if err := tools.RegisterAllWithHooks(mcpEng, cfg.AppConfig, cfg.OnBrainUpdate, func(path string) {
 		if dispatchFileWrite != nil {
 			dispatchFileWrite(path)
 		}
-	}); err != nil {
+	}, &memRef, cfg.SudoGate); err != nil {
 		return nil, fmt.Errorf("orchestrator: register tools: %w", err)
 	}
 
@@ -197,6 +203,7 @@ func New(
 		}
 		if emb, ok := inferrer.(embedder); ok {
 			o.memory = memory.New(db, emb, cfg.EmbedderModel, log)
+			memRef = o.memory // wire the KB tool's lazy getter
 		}
 	}
 
@@ -244,6 +251,9 @@ func (o *Orchestrator) SetProject(ctx context.Context, projectID string) error {
 	}
 	return nil
 }
+
+// ProjectID returns the currently active project ID.
+func (o *Orchestrator) ProjectID() string { return o.projectID }
 
 // channelRawFn returns a function that routes raw activity events to the
 // channel EngineRoom (war-room convID).  Set ra.OnRaw = o.channelRawFn(agentID)

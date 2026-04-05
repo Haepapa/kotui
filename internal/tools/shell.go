@@ -37,31 +37,59 @@ var shellSchema = json.RawMessage(`{
 	}
 }`)
 
-func shellExecutorTool(box *mcp.Sandbox) mcp.ToolDef {
-	return mcp.ToolDef{
-		Name:      "shell_executor",
-		Clearance: models.ClearanceSpecialist,
-		Description: "Run a shell command inside the project workspace. " +
+func shellExecutorTool(box *mcp.Sandbox, gate *SudoGate) mcp.ToolDef {
+	description := "Run a shell command inside the project workspace. " +
+		"Stdout and stderr are captured and returned. " +
+		"sudo requires Boss approval — the command will pause until authorised. " +
+		"Default timeout is 30 seconds (max 300)."
+	if gate == nil {
+		description = "Run a shell command inside the project workspace. " +
 			"Stdout and stderr are captured and returned. " +
-			"sudo is never permitted. Default timeout is 30 seconds (max 300).",
-		Schema:  shellSchema,
-		Handler: shellHandler(box),
+			"sudo is never permitted. Default timeout is 30 seconds (max 300)."
+	}
+	return mcp.ToolDef{
+		Name:        "shell_executor",
+		Clearance:   models.ClearanceSpecialist,
+		Description: description,
+		Schema:      shellSchema,
+		Handler:     shellHandler(box, gate),
 	}
 }
 
-func shellHandler(box *mcp.Sandbox) mcp.Handler {
+func shellHandler(box *mcp.Sandbox, gate *SudoGate) mcp.Handler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
 		command, _ := args["command"].(string)
 		if command == "" {
 			return "", fmt.Errorf("shell_executor: command must not be empty")
 		}
 
-		// Hard block on sudo — check both args map and command string.
+		// sudo handling: gate-approval when available, hard-block otherwise.
 		if err := mcp.ValidateSudo(args); err != nil {
 			return "", err
 		}
 		if containsSudo(command) {
-			return "", fmt.Errorf("shell_executor: sudo is not permitted in command")
+			if gate == nil {
+				return "", fmt.Errorf("shell_executor: sudo is not permitted")
+			}
+			// Generate a stable ID for this approval request using the command hash.
+			approvalID := sudoApprovalID(command)
+			approved, gateErr := gate.Request(ctx, approvalID, command)
+			if gateErr != nil {
+				return "", &mcp.MCPError{
+					IsRecoverable: false,
+					Suggestion:    gateErr.Error(),
+					Underlying:    fmt.Errorf("shell_executor: sudo gate: %w", gateErr),
+				}
+			}
+			if !approved {
+				return "", &mcp.MCPError{
+					IsRecoverable: false,
+					Suggestion:    "The Boss rejected this sudo command. Propose an alternative approach that does not require elevated privileges.",
+					Underlying:    fmt.Errorf("shell_executor: sudo command rejected by Boss"),
+				}
+			}
+			// Approved — strip 'sudo' prefix and run as normal (sandbox already restricts scope).
+			command = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(command), "sudo"))
 		}
 
 		// Resolve working directory.
@@ -179,4 +207,16 @@ func toFloat64(v any) float64 {
 		return float64(x)
 	}
 	return 0
+}
+
+// sudoApprovalID generates a deterministic short ID from the command string
+// for use as the sudo approval DB record ID.
+func sudoApprovalID(cmd string) string {
+	// Simple FNV-inspired hash to avoid importing crypto packages.
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(cmd); i++ {
+		h ^= uint64(cmd[i])
+		h *= 1099511628211
+	}
+	return fmt.Sprintf("sudo-%016x", h)
 }

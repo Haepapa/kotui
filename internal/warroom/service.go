@@ -125,6 +125,10 @@ type WarRoomService struct {
 	// Identity registry — caches soul/persona/skills in memory so
 	// GetAgentBrainFiles never hits disk on a cache-warm read.
 	registry *agent.IdentityRegistry
+
+	// onSudoDecide, if set, is called when the Boss approves or rejects a
+	// sudo command approval. Wired by gui.go after the SudoGate is created.
+	onSudoDecide func(id string, approved bool)
 }
 
 // pendingDM holds a DM message that could not be processed because Ollama
@@ -752,6 +756,12 @@ func (s *WarRoomService) DecideApproval(ctx context.Context, id, decision string
 		if err := s.db.DecideApproval(ctx, id, decision); err != nil {
 			return err
 		}
+	} else if approval.Kind == "sudo" && s.onSudoDecide != nil {
+		// Unblock the waiting shell executor before persisting the decision.
+		s.onSudoDecide(id, decision == "approved")
+		if err := s.db.DecideApproval(ctx, id, decision); err != nil {
+			return err
+		}
 	} else {
 		if err := s.db.DecideApproval(ctx, id, decision); err != nil {
 			return err
@@ -771,6 +781,13 @@ func (s *WarRoomService) EmitPendingApprovals(projectID string) {
 	}
 	pending, _ := s.db.ListPendingApprovals(context.Background(), projectID)
 	s.app.Event.Emit("kotui:approval", pending)
+}
+
+// SetSudoDecideHook registers a callback that is called when the Boss approves
+// or rejects a sudo command approval (kind="sudo"). gui.go wires this to
+// SudoGate.Resolve after both the gate and service are created.
+func (s *WarRoomService) SetSudoDecideHook(fn func(id string, approved bool)) {
+	s.onSudoDecide = fn
 }
 
 // applyHandbookProposal appends the proposed text to handbook.md and

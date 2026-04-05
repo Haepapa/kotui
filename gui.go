@@ -20,7 +20,9 @@ import (
 	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/internal/orchestrator"
 	"github.com/haepapa/kotui/internal/store"
+	"github.com/haepapa/kotui/internal/tools"
 	"github.com/haepapa/kotui/internal/warroom"
+	"github.com/haepapa/kotui/pkg/models"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -43,6 +45,10 @@ func runGUI(cfg config.Config, db *store.DB) {
 	var queueStateFn func(qs orchestrator.QueueState)
 	var approvalFn func(projectID string)
 
+	// sudoGate enables the Boss-approval workflow for sudo commands.
+	// Created before orchCfg so the gate pointer is captured in the config.
+	sudoGate := tools.NewSudoGate()
+
 	orchCfg := orchestrator.OrchestratorConfig{
 		LeadModel:           cfg.Models.Lead,
 		WorkerModel:         cfg.Models.Specialist,
@@ -52,6 +58,7 @@ func runGUI(cfg config.Config, db *store.DB) {
 		CompanyIdentityPath: "COMPANY_IDENTITY.md",
 		HandbookPath:        filepath.Join(cfg.App.DataDir, "handbook.md"),
 		AppConfig:           cfg,
+		SudoGate:            sudoGate,
 		OnBrainUpdate: func(agentID, file, summary string) {
 			if brainUpdateFn != nil {
 				brainUpdateFn(agentID, file, summary)
@@ -123,6 +130,24 @@ func runGUI(cfg config.Config, db *store.DB) {
 	approvalFn = func(projectID string) {
 		wrService.EmitPendingApprovals(projectID)
 	}
+
+	// Wire sudo gate: on request → create DB approval + notify frontend;
+	// on decision → unblock the waiting shell executor.
+	sudoGate.SetOnRequest(func(id, cmd string) {
+		projectID := ""
+		if orch != nil {
+			projectID = orch.ProjectID()
+		}
+		_ = db.CreateApproval(context.Background(), models.Approval{
+			ID:          id,
+			ProjectID:   projectID,
+			Kind:        "sudo",
+			SubjectID:   id,
+			Description: "🔐 **sudo command** awaiting Boss approval:\n```\n" + cmd + "\n```",
+		})
+		wrService.EmitPendingApprovals(projectID)
+	})
+	wrService.SetSudoDecideHook(func(id string, approved bool) { sudoGate.Resolve(id, approved) })
 	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
 		Name: "WarRoom",
 	}))

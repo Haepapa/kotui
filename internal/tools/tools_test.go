@@ -663,9 +663,9 @@ func TestRegisterAll_AllToolsPresent(t *testing.T) {
 		t.Fatalf("RegisterAll: %v", err)
 	}
 
-	// All 6 tools should appear in the Lead's system prompt fragment.
+	// All tools should appear in the Lead's system prompt fragment.
 	fragment := eng.SystemPromptFragment(models.ClearanceLead)
-	for _, name := range []string{"filesystem", "shell_executor", "file_manager", "iot_gateway", "web_search", "project_critic"} {
+	for _, name := range []string{"filesystem", "shell_executor", "file_manager", "iot_gateway", "web_search", "project_critic", "knowledge_base"} {
 		if !strings.Contains(fragment, name) {
 			t.Errorf("expected %q in system prompt fragment, not found", name)
 		}

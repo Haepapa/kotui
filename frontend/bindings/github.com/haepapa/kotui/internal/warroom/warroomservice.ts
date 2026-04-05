@@ -306,6 +306,15 @@ export function SendDirectMessage(agentID: string, message: string): $Cancellabl
 }
 
 /**
+ * SetSudoDecideHook registers a callback that is called when the Boss approves
+ * or rejects a sudo command approval (kind="sudo"). gui.go wires this to
+ * SudoGate.Resolve after both the gate and service are created.
+ */
+export function SetSudoDecideHook(fn: any): $CancellablePromise<void> {
+    return $Call.ByID(1352021911, fn);
+}
+
+/**
  * Shutdown stops the event bridge and health monitor. Called on app teardown.
  */
 export function Shutdown(): $CancellablePromise<void> {
