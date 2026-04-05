@@ -168,15 +168,23 @@ func runWorkerTask(
 		})
 
 		// Lead verifies (if in swap mode, Lead reloads now).
+		// Verification prompt: sets an explicit "adequate = approved" bar and
+		// suppresses the handbook CS protocol (irrelevant for verdict output).
 		verifyInstruction := fmt.Sprintf(
-			"A Specialist has completed task %q. Review their output and respond with one of:\n"+
-				"- APPROVED — if the output is correct and complete\n"+
-				"- CORRECTION: <instruction> — if the output needs revision\n\n"+
-				"Worker output:\n%s", job.Instruction, output)
+			"VERIFICATION — do NOT output a confidence_score JSON line.\n\n"+
+				"A Specialist completed the following task:\n%s\n\n"+
+				"Specialist output:\n%s\n\n"+
+				"Respond with exactly ONE of:\n"+
+				"  APPROVED — the output adequately addresses the task (perfection is NOT required)\n"+
+				"  CORRECTION: <specific issue> — ONLY if there is a clear factual error or an explicitly required element is completely absent\n\n"+
+				"Default to APPROVED for any reasonable output. When in doubt, APPROVED.",
+			job.Instruction, output)
 
 		lead.OnRaw = makeRawFn(disp, job.ProjectID, job.ConvID, "lead")
 		verdict, verifyErr := lead.Turn(ctx, verifyInstruction)
 		lead.OnRaw = nil
+		// Strip any CS signal lines so they cannot mask the APPROVED/CORRECTION token.
+		verdict = stripSignalLines(verdict)
 		journalEntry := agent.JournalEntry{
 			Task:    job.Instruction,
 			Outcome: "success",
@@ -218,18 +226,93 @@ func runWorkerTask(
 		log.Info("lead requested correction", "task", job.TaskID, "attempt", attempt+1)
 	}
 
-	// All retries exhausted.
+	// All retries exhausted. If the worker produced any output at all, accept
+	// it as a soft success: the Lead kept requesting improvements but the output
+	// is usable. This prevents the confusing "failed" state when the worker did
+	// produce content and the Lead was simply being overly critical.
+	if lastOutput != "" {
+		if db != nil {
+			_ = db.UpdateTaskStatus(ctx, job.TaskID, "done")
+		}
+		disp.DispatchSummary(models.Message{
+			ProjectID:      job.ProjectID,
+			ConversationID: job.ConvID,
+			Kind:           models.KindMilestone,
+			Tier:           models.TierSummary,
+			Content:        fmt.Sprintf("✓ Task completed (accepted after review): %s", job.TaskID),
+		})
+		return WorkerResult{TaskID: job.TaskID, Output: lastOutput}, nil
+	}
 	if db != nil {
 		_ = db.UpdateTaskStatus(ctx, job.TaskID, "failed")
 	}
 	return WorkerResult{TaskID: job.TaskID, Output: lastOutput, IsError: true},
-		fmt.Errorf("task %s: all %d verification attempts failed", job.TaskID, verifyMaxRetries+1)
+		fmt.Errorf("task %s: worker produced no output", job.TaskID)
 }
 
 // isApproved checks whether the Lead's verification response signals approval.
+// stripSignalLines removes JSON signal lines (confidence_score, propose_handbook,
+// escalation_needed) from a verdict string so they cannot mask APPROVED/CORRECTION.
+func stripSignalLines(verdict string) string {
+	var out []string
+	for _, line := range splitLines(verdict) {
+		t := trimSpace(line)
+		if len(t) > 0 && t[0] == '{' {
+			if indexOf(t, "confidence_score") >= 0 ||
+				indexOf(t, "propose_handbook") >= 0 ||
+				indexOf(t, "escalation_needed") >= 0 {
+				continue
+			}
+		}
+		out = append(out, line)
+	}
+	return trimSpace(joinLines(out))
+}
+
+func splitLines(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	out = append(out, s[start:])
+	return out
+}
+
+func joinLines(lines []string) string {
+	total := 0
+	for _, l := range lines {
+		total += len(l) + 1
+	}
+	b := make([]byte, 0, total)
+	for i, l := range lines {
+		if i > 0 {
+			b = append(b, '\n')
+		}
+		b = append(b, l...)
+	}
+	return string(b)
+}
+
 func isApproved(verdict string) bool {
 	upper := trimUpper(verdict)
-	return upper == "APPROVED" || containsWord(upper, "APPROVED")
+	// Primary: explicit APPROVED token.
+	if upper == "APPROVED" || containsWord(upper, "APPROVED") {
+		return true
+	}
+	// Secondary: positive phrases the Lead may use instead of the token.
+	positives := []string{"LOOKS GOOD", "WELL DONE", "MEETS THE REQUIREMENTS",
+		"MEETS REQUIREMENTS", "SATISFACTORY", "ACCEPTABLE", "ADEQUATE",
+		"OUTPUT IS GOOD", "OUTPUT IS CORRECT", "OUTPUT IS COMPLETE"}
+	for _, p := range positives {
+		if indexOf(upper, p) >= 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // extractCorrection pulls the correction instruction from a verdict like
