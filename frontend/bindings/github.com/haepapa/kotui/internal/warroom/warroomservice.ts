@@ -68,8 +68,8 @@ export function EmitBrainUpdate(agentID: string, file: string, summary: string):
  * OnQueueState callback on every enqueue/dequeue/execution state change.
  * This method must be non-blocking — it is called from the queue dispatcher goroutine.
  */
-export function EmitQueueState(p0: number, p1: number, p2: number, p3: number, active: boolean): $CancellablePromise<void> {
-    return $Call.ByID(2488856920, p0, p1, p2, p3, active);
+export function EmitQueueState(p0: number, p1: number, p2: number, p3: number, active: boolean, throttled: boolean): $CancellablePromise<void> {
+    return $Call.ByID(2488856920, p0, p1, p2, p3, active, throttled);
 }
 
 /**

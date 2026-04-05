@@ -49,6 +49,15 @@ export interface HeartbeatState {
   updated_at: string;
 }
 
+export interface QueueState {
+  p0: number;
+  p1: number;
+  p2: number;
+  p3: number;
+  active: boolean;
+  throttled: boolean;
+}
+
 export type ViewMode = 'boss' | 'dev';
 
 export interface Approval {

@@ -112,7 +112,7 @@ func runGUI(cfg config.Config, db *store.DB) {
 		wrService.EmitBrainUpdate(context.Background(), agentID, file, summary)
 	}
 	queueStateFn = func(qs orchestrator.QueueState) {
-		wrService.EmitQueueState(qs.P0, qs.P1, qs.P2, qs.P3, qs.Active)
+		wrService.EmitQueueState(qs.P0, qs.P1, qs.P2, qs.P3, qs.Active, qs.Throttled)
 	}
 	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
 		Name: "WarRoom",

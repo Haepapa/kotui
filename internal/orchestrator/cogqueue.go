@@ -51,11 +51,12 @@ type cogRequest struct {
 // QueueState is a point-in-time snapshot of the queue, suitable for the
 // kotui:queue_state frontend event.
 type QueueState struct {
-	P0     int  `json:"p0"`
-	P1     int  `json:"p1"`
-	P2     int  `json:"p2"`
-	P3     int  `json:"p3"`
-	Active bool `json:"active"` // true while a request is executing
+	P0        int  `json:"p0"`
+	P1        int  `json:"p1"`
+	P2        int  `json:"p2"`
+	P3        int  `json:"p3"`
+	Active    bool `json:"active"`    // true while a request is executing
+	Throttled bool `json:"throttled"` // true when P3 is paused due to system pressure
 }
 
 // CogQueue routes all Ollama inference requests through a P0→P3 priority
@@ -161,11 +162,12 @@ func (q *CogQueue) Submit(ctx context.Context, priority CogPriority, fn CogFn) (
 // State returns a current snapshot of the queue depths and active status.
 func (q *CogQueue) State() QueueState {
 	return QueueState{
-		P0:     int(q.waiting[P0Emergency].Load()),
-		P1:     int(q.waiting[P1Lead].Load()),
-		P2:     int(q.waiting[P2Interactive].Load()),
-		P3:     int(q.waiting[P3Background].Load()),
-		Active: q.active.Load(),
+		P0:        int(q.waiting[P0Emergency].Load()),
+		P1:        int(q.waiting[P1Lead].Load()),
+		P2:        int(q.waiting[P2Interactive].Load()),
+		P3:        int(q.waiting[P3Background].Load()),
+		Active:    q.active.Load(),
+		Throttled: q.sysmon != nil && q.sysmon.IsUnderPressure(),
 	}
 }
 

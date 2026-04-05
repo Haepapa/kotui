@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { KotuiMessage, ViewMode, HeartbeatState } from '../lib/types';
+  import type { KotuiMessage, ViewMode, HeartbeatState, QueueState } from '../lib/types';
   import { sendBossCommand, sendDirectMessage } from '../lib/warroom';
   import { wr, agentName } from '../stores/warroom.svelte';
 
@@ -8,12 +8,13 @@
     mode: ViewMode;
     isBusy: boolean;
     heartbeat: HeartbeatState;
+    queueState?: QueueState;
     isDM?: boolean;
     dmAgentID?: string;
     streamContent?: string; // live-streamed token accumulation for DM
   }
 
-  let { messages, mode, isBusy, heartbeat, isDM = false, dmAgentID = '', streamContent = '' }: Props = $props();
+  let { messages, mode, isBusy, heartbeat, queueState, isDM = false, dmAgentID = '', streamContent = '' }: Props = $props();
 
   let input = $state('');
   let sendError = $state('');
@@ -163,9 +164,21 @@
     return parts.length ? parts : [{ type: 'text', value: content }];
   }
 
-  // Pulse breadcrumb for status bar
+  // Queue-aware status bar state.
+  // Priority: throttled → active → p3 queued → busy → idle
+  type DotColor = 'idle' | 'active' | 'queued' | 'throttled';
+  const dotColor = $derived<DotColor>(
+    queueState?.throttled ? 'throttled'
+    : (queueState?.active || isBusy) ? 'active'
+    : queueState?.p3 ? 'queued'
+    : 'idle'
+  );
   const statusLabel = $derived(
-    isBusy ? heartbeat.breadcrumbs.at(-1) ?? 'Working…' : 'Online'
+    queueState?.throttled ? '⚠ System busy — background tasks paused'
+    : queueState?.active ? (heartbeat.breadcrumbs.at(-1) ?? 'Working…')
+    : queueState?.p3 ? `Background tasks queued (${queueState.p3})`
+    : isBusy ? (heartbeat.breadcrumbs.at(-1) ?? 'Working…')
+    : 'Online'
   );
 
   function copyText(key: string, text: string) {
@@ -338,8 +351,15 @@
 
   <!-- Status bar -->
   <div class="status-bar">
-    <span class="status-dot" class:busy={isBusy}></span>
+    <span class="status-dot" class:active={dotColor === 'active'} class:queued={dotColor === 'queued'} class:throttled={dotColor === 'throttled'}></span>
     <span class="status-label">{statusLabel}</span>
+    {#if queueState && (queueState.p1 > 0 || queueState.p2 > 0 || queueState.p3 > 0)}
+      <span class="queue-chips">
+        {#if queueState.p1 > 0}<span class="queue-chip chip-p1">P1 ×{queueState.p1}</span>{/if}
+        {#if queueState.p2 > 0}<span class="queue-chip chip-p2">P2 ×{queueState.p2}</span>{/if}
+        {#if queueState.p3 > 0}<span class="queue-chip chip-p3">P3 ×{queueState.p3}</span>{/if}
+      </span>
+    {/if}
   </div>
 
   <!-- Input -->
@@ -696,8 +716,18 @@
     flex-shrink: 0;
     transition: background 0.3s;
   }
-  .status-dot.busy {
-    background: var(--status-busy);
+  /* 🔵 active — blue, pulsing */
+  .status-dot.active {
+    background: #60a5fa;
+    animation: pulse-dot 1s ease-in-out infinite;
+  }
+  /* 🟡 queued — amber */
+  .status-dot.queued {
+    background: #fbbf24;
+  }
+  /* 🔴 throttled — red, pulsing */
+  .status-dot.throttled {
+    background: #f87171;
     animation: pulse-dot 1s ease-in-out infinite;
   }
   @keyframes pulse-dot {
@@ -708,6 +738,21 @@
     font-size: 0.75rem;
     color: var(--text-secondary);
   }
+  .queue-chips {
+    display: flex;
+    gap: 0.25rem;
+    margin-left: 0.25rem;
+  }
+  .queue-chip {
+    font-size: 0.65rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .chip-p1 { background: rgba(96,165,250,0.15); color: #60a5fa; }
+  .chip-p2 { background: rgba(167,139,250,0.15); color: #a78bfa; }
+  .chip-p3 { background: rgba(251,191,36,0.15); color: #fbbf24; }
 
   /* Composer — fixed at bottom, never pushes messages */
   .composer {

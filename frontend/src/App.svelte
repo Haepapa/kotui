@@ -177,6 +177,7 @@
           isBusy={dmBusy}
           streamContent={dmStream}
           heartbeat={wr.heartbeat}
+          queueState={wr.queueState}
           isDM={true}
           dmAgentID={wr.activeDMAgentID}
         />
@@ -184,7 +185,7 @@
           <EngineRoom messages={dmEngineMsgs} />
         {/if}
       {:else}
-        <ChatArea messages={visibleMsgs} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} streamContent={wr.channelStream} />
+        <ChatArea messages={visibleMsgs} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} queueState={wr.queueState} streamContent={wr.channelStream} />
         {#if wr.viewMode === 'dev'}
           <EngineRoom messages={engineMsgs} />
         {/if}

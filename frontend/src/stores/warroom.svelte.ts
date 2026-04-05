@@ -26,7 +26,7 @@ import {
   initFirstRun,
 } from '../lib/warroom';
 import { Events } from '@wailsio/runtime';
-import type { AgentInfo, AppView, Approval, HeartbeatState, KotuiMessage, Project, ViewMode } from '../lib/types';
+import type { AgentInfo, AppView, Approval, HeartbeatState, KotuiMessage, Project, QueueState, ViewMode } from '../lib/types';
 
 // --- Reactive state object ---
 
@@ -70,6 +70,11 @@ export const wr = $state({
 
   // Live streaming content for channel chat — cleared when the final message arrives.
   channelStream: '',
+
+  // Cognition queue state — updated via kotui:queue_state events.
+  queueState: {
+    p0: 0, p1: 0, p2: 0, p3: 0, active: false, throttled: false,
+  } as QueueState,
 });
 
 // --- Derived helpers (functions because .svelte.ts can't use $derived at module scope with runes) ---
@@ -173,6 +178,12 @@ export async function initWarRoom() {
   // Channel streaming chunks — accumulate per response, cleared on message arrival.
   unsubChannelStream = onChannelStream((payload) => {
     wr.channelStream = (wr.channelStream ?? '') + payload.chunk;
+  });
+
+  // Cognition queue state — emitted by the backend on every enqueue/dequeue/execution change.
+  Events.On('kotui:queue_state', (event: any) => {
+    const qs = event?.data as QueueState;
+    if (qs) Object.assign(wr.queueState, qs);
   });
 
   // Brain file update notifications — adds a system_event to the agent's DM

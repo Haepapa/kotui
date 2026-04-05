@@ -1125,13 +1125,14 @@ func (s *WarRoomService) EmitBrainUpdate(ctx context.Context, agentID, file, sum
 // the current cognition queue depth and activity. Called from the orchestrator's
 // OnQueueState callback on every enqueue/dequeue/execution state change.
 // This method must be non-blocking — it is called from the queue dispatcher goroutine.
-func (s *WarRoomService) EmitQueueState(p0, p1, p2, p3 int, active bool) {
+func (s *WarRoomService) EmitQueueState(p0, p1, p2, p3 int, active, throttled bool) {
 	s.app.Event.Emit("kotui:queue_state", map[string]any{
-		"p0":     p0,
-		"p1":     p1,
-		"p2":     p2,
-		"p3":     p3,
-		"active": active,
+		"p0":        p0,
+		"p1":        p1,
+		"p2":        p2,
+		"p3":        p3,
+		"active":    active,
+		"throttled": throttled,
 	})
 }
 
