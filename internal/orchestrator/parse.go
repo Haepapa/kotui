@@ -200,7 +200,33 @@ func parseEscalation(text string) *EscalationSignal {
 	return nil
 }
 
-// parseTaskList tries to extract a JSON array of TaskItems from agent output.
+// HandbookProposal is the structured payload emitted by the Lead Optimizer
+// when it identifies improvements to the team handbook.
+type HandbookProposal struct {
+	ProposeHandbook bool   `json:"propose_handbook"`
+	Diff            string `json:"diff"` // Proposed markdown section to append
+}
+
+// parseHandbookProposal scans response lines for a handbook proposal signal.
+// Returns nil if no proposal is found or ProposeHandbook is false.
+func parseHandbookProposal(text string) *HandbookProposal {
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") || !strings.Contains(line, "propose_handbook") {
+			continue
+		}
+		var sig HandbookProposal
+		if err := json.Unmarshal([]byte(line), &sig); err != nil {
+			continue
+		}
+		if sig.ProposeHandbook && sig.Diff != "" {
+			return &sig
+		}
+	}
+	return nil
+}
+
+
 // Agents are prompted to emit a JSON array on a single line when decomposing.
 // Returns nil if no valid list is found.
 func parseTaskList(text string) []TaskItem {
@@ -237,6 +263,9 @@ func stripToolCallLines(text string) string {
 					continue
 				}
 				if _, hasCS := probe["confidence_score"]; hasCS {
+					continue
+				}
+				if _, hasPropose := probe["propose_handbook"]; hasPropose {
 					continue
 				}
 			}

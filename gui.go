@@ -41,6 +41,7 @@ func runGUI(cfg config.Config, db *store.DB) {
 	// orchestrator callbacks reach through these closures to notify the service.
 	var brainUpdateFn func(agentID, file, summary string)
 	var queueStateFn func(qs orchestrator.QueueState)
+	var approvalFn func(projectID string)
 
 	orchCfg := orchestrator.OrchestratorConfig{
 		LeadModel:           cfg.Models.Lead,
@@ -59,6 +60,11 @@ func runGUI(cfg config.Config, db *store.DB) {
 		OnQueueState: func(qs orchestrator.QueueState) {
 			if queueStateFn != nil {
 				queueStateFn(qs)
+			}
+		},
+		OnApproval: func(projectID string) {
+			if approvalFn != nil {
+				approvalFn(projectID)
 			}
 		},
 	}
@@ -113,6 +119,9 @@ func runGUI(cfg config.Config, db *store.DB) {
 	}
 	queueStateFn = func(qs orchestrator.QueueState) {
 		wrService.EmitQueueState(qs.P0, qs.P1, qs.P2, qs.P3, qs.Active, qs.Throttled)
+	}
+	approvalFn = func(projectID string) {
+		wrService.EmitPendingApprovals(projectID)
 	}
 	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
 		Name: "WarRoom",

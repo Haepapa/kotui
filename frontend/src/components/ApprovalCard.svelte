@@ -33,6 +33,7 @@
       case 'hiring': return '👤 Hire';
       case 'skill_promotion': return '⬆️ Promote';
       case 'sudo': return '🔐 Sudo';
+      case 'handbook_proposal': return '📋 Handbook Update';
       default: return kind;
     }
   }
@@ -43,7 +44,10 @@
     <span class="kind-badge">{kindLabel(approval.kind)}</span>
     <span class="card-time">{formatTime(approval.created_at)}</span>
   </div>
-  <p class="card-desc">{approval.description}</p>
+  <p class="card-desc" class:card-desc-scroll={approval.kind === 'handbook_proposal'}>{approval.description}</p>
+  {#if approval.kind === 'handbook_proposal'}
+    <p class="card-hint">✓ Approve to append this section to handbook.md</p>
+  {/if}
   <div class="card-actions">
     <button class="btn approve" onclick={() => decide('approved')} disabled={deciding}>✓ Approve</button>
     <button class="btn reject" onclick={() => decide('rejected')} disabled={deciding}>✗ Reject</button>
@@ -81,6 +85,22 @@
     color: var(--text-secondary);
     margin: 0;
     line-height: 1.4;
+  }
+  .card-desc-scroll {
+    max-height: 8rem;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    background: var(--bg-input, rgba(0,0,0,0.2));
+    border-radius: 4px;
+    padding: 0.375rem 0.5rem;
+  }
+  .card-hint {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    margin: 0;
+    font-style: italic;
   }
   .card-actions {
     display: flex;

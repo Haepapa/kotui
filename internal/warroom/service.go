@@ -16,6 +16,7 @@ package warroom
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -739,6 +740,14 @@ func (s *WarRoomService) DecideApproval(ctx context.Context, id, decision string
 				return dbErr
 			}
 		}
+	} else if approval.Kind == "handbook_proposal" && decision == "approved" {
+		// Apply the proposed handbook addition before marking as decided.
+		if applyErr := s.applyHandbookProposal(ctx, approval.Description); applyErr != nil {
+			slog.Default().Warn("failed to apply handbook proposal", "err", applyErr)
+		}
+		if err := s.db.DecideApproval(ctx, id, decision); err != nil {
+			return err
+		}
 	} else {
 		if err := s.db.DecideApproval(ctx, id, decision); err != nil {
 			return err
@@ -750,7 +759,26 @@ func (s *WarRoomService) DecideApproval(ctx context.Context, id, decision string
 	return nil
 }
 
-// GetConfig returns the current configuration as a flat UIConfig.
+// EmitPendingApprovals loads and broadcasts all pending approvals for a project.
+// Called by the orchestrator's LeadOptimizer when a new handbook proposal is created.
+func (s *WarRoomService) EmitPendingApprovals(projectID string) {
+	if s.db == nil {
+		return
+	}
+	pending, _ := s.db.ListPendingApprovals(context.Background(), projectID)
+	s.app.Event.Emit("kotui:approval", pending)
+}
+
+// applyHandbookProposal appends the proposed text to handbook.md and
+// broadcasts the updated handbook to all agents.
+func (s *WarRoomService) applyHandbookProposal(ctx context.Context, proposalText string) error {
+	current, err := s.GetHandbook(ctx)
+	if err != nil {
+		current = ""
+	}
+	updated := strings.TrimRight(current, "\n") + "\n\n---\n\n" + proposalText
+	return s.SaveHandbook(ctx, updated)
+}
 func (s *WarRoomService) GetConfig(ctx context.Context) (UIConfig, error) {
 	return UIConfig{
 		OllamaEndpoint:      s.cfg.Ollama.Endpoint,

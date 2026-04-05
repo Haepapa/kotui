@@ -53,9 +53,11 @@ type OrchestratorConfig struct {
 	// change (enqueue, dequeue, execution start/stop). Use it to push a
 	// kotui:queue_state event to the frontend.
 	OnQueueState func(QueueState)
+	// OnApproval, if non-nil, is called (from a goroutine) when the Lead
+	// Optimizer creates a new handbook proposal approval. The projectID
+	// identifies which project's pending approval queue should be refreshed.
+	OnApproval func(projectID string)
 }
-
-// Orchestrator coordinates all agents, tools, and communication.
 type Orchestrator struct {
 	cfg     OrchestratorConfig
 	disp    *dispatcher.Dispatcher
@@ -84,6 +86,9 @@ type Orchestrator struct {
 	// cogQueue serialises all Ollama inference calls with P0→P3 priority.
 	// Replaces the old dmInferenceMu/dmQueueCount pair.
 	cogQueue *CogQueue
+
+	// optimizer runs periodic journal reviews and proposes handbook amendments.
+	optimizer *LeadOptimizer
 
 	projectID string
 	convID    string
@@ -175,6 +180,21 @@ func New(
 	bgCtx := context.Background()
 	o.cogQueue.sysmon.Start(bgCtx)
 	o.cogQueue.Start(bgCtx)
+
+	// Wire the Lead Optimizer if an approval callback is configured.
+	if cfg.OnApproval != nil && db != nil {
+		o.optimizer = newLeadOptimizer(cfg, inferrer, db, log,
+			func(projectID, proposalText string) {
+				_ = db.CreateApproval(context.Background(), models.Approval{
+					ProjectID:   projectID,
+					Kind:        "handbook_proposal",
+					SubjectID:   "handbook",
+					Description: proposalText,
+				})
+				cfg.OnApproval(projectID)
+			},
+		)
+	}
 
 	return o, nil
 }
@@ -339,6 +359,9 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 				Tier:           models.TierSummary,
 				Content:        fmt.Sprintf("⚠️ Task %s failed: %v", task.ID, workerErr),
 			})
+		}
+		if !result.IsError && o.optimizer != nil {
+			o.optimizer.NotifyTaskDone(o.projectID)
 		}
 		_ = result
 	}

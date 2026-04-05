@@ -63,6 +63,14 @@ export function EmitBrainUpdate(agentID: string, file: string, summary: string):
 }
 
 /**
+ * EmitPendingApprovals loads and broadcasts all pending approvals for a project.
+ * Called by the orchestrator's LeadOptimizer when a new handbook proposal is created.
+ */
+export function EmitPendingApprovals(projectID: string): $CancellablePromise<void> {
+    return $Call.ByID(882949697, projectID);
+}
+
+/**
  * EmitQueueState fires a kotui:queue_state event so the frontend can display
  * the current cognition queue depth and activity. Called from the orchestrator's
  * OnQueueState callback on every enqueue/dequeue/execution state change.
@@ -110,9 +118,6 @@ export function GetCompanyIdentity(): $CancellablePromise<string> {
     return $Call.ByID(1837997534);
 }
 
-/**
- * GetConfig returns the current configuration as a flat UIConfig.
- */
 export function GetConfig(): $CancellablePromise<$models.UIConfig> {
     return $Call.ByID(3551944047).then(($result: any) => {
         return $$createType5($result);

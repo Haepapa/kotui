@@ -69,3 +69,37 @@ func (db *DB) ListJournalEmbeddings(ctx context.Context, agentID, projectID stri
 	}
 	return results, rows.Err()
 }
+
+// ListRecentJournalEmbeddings returns the most recent journal entries across
+// all agents for a project, ordered newest-first. Used by the LeadOptimizer
+// to gather context for handbook proposal reviews.
+func (db *DB) ListRecentJournalEmbeddings(ctx context.Context, projectID string, limit int) ([]JournalEmbedding, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, agent_id, project_id, content, embedding, is_feedback, created_at
+		 FROM journal_embeddings
+		 WHERE project_id = ?
+		 ORDER BY created_at DESC
+		 LIMIT ?`,
+		projectID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("store: list recent journal embeddings: %w", err)
+	}
+	defer rows.Close()
+
+	var results []JournalEmbedding
+	for rows.Next() {
+		var e JournalEmbedding
+		var embJSON string
+		var isFeedback int
+		if err := rows.Scan(&e.ID, &e.AgentID, &e.ProjectID, &e.Content, &embJSON, &isFeedback, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("store: scan journal embedding: %w", err)
+		}
+		if err := json.Unmarshal([]byte(embJSON), &e.Embedding); err != nil {
+			return nil, fmt.Errorf("store: unmarshal embedding: %w", err)
+		}
+		e.IsFeedback = isFeedback != 0
+		results = append(results, e)
+	}
+	return results, rows.Err()
+}
