@@ -40,6 +40,7 @@ type OrchestratorConfig struct {
 	DataDir             string
 	SandboxRoot         string
 	CompanyIdentityPath string
+	HandbookPath        string
 	AppConfig           config.Config
 
 	// OnBrainUpdate, if non-nil, is called whenever an agent successfully
@@ -116,6 +117,7 @@ func New(
 		Model:               cfg.LeadModel,
 		DataDir:             cfg.DataDir,
 		CompanyIdentityPath: cfg.CompanyIdentityPath,
+		HandbookPath:        cfg.HandbookPath,
 		MCPFragment:         mcpEng.SystemPromptFragment(models.ClearanceLead),
 	})
 	if err != nil {
@@ -489,6 +491,7 @@ func (o *Orchestrator) agentIdentityForDM(agentID string) (model string, clearan
 			Model:               o.cfg.WorkerModel,
 			DataDir:             o.cfg.DataDir,
 			CompanyIdentityPath: o.cfg.CompanyIdentityPath,
+			HandbookPath:        o.cfg.HandbookPath,
 			MCPFragment:         o.mcpEng.SystemPromptFragment(models.ClearanceSpecialist),
 		}
 		if a, err := agent.Spawn(spawnCfg); err == nil {
@@ -545,7 +548,7 @@ func (o *Orchestrator) CultureBroadcast(newIdentityPath string) error {
 	defer o.leadMu.Unlock()
 
 	mcpFragment := o.mcpEng.SystemPromptFragment(models.ClearanceLead)
-	if err := o.leadAgent.CultureUpdate(newIdentityPath, mcpFragment); err != nil {
+	if err := o.leadAgent.CultureUpdate(newIdentityPath, o.cfg.HandbookPath, mcpFragment); err != nil {
 		return fmt.Errorf("culture broadcast: lead update: %w", err)
 	}
 	o.lead.ResetContext(o.leadAgent.SystemPrompt())
@@ -555,6 +558,26 @@ func (o *Orchestrator) CultureBroadcast(newIdentityPath string) error {
 		Kind:      models.KindSystemEvent,
 		Tier:      models.TierSummary,
 		Content:   "🔄 Culture Update broadcast — all active agents have received updated values",
+	})
+	return nil
+}
+
+// HandbookBroadcast forces a full context reset on all active agents with the
+// updated handbook. Called when handbook.md is edited.
+func (o *Orchestrator) HandbookBroadcast(handbookPath string) error {
+	o.leadMu.Lock()
+	defer o.leadMu.Unlock()
+	o.cfg.HandbookPath = handbookPath
+	mcpFragment := o.mcpEng.SystemPromptFragment(models.ClearanceLead)
+	if err := o.leadAgent.CultureUpdate(o.cfg.CompanyIdentityPath, handbookPath, mcpFragment); err != nil {
+		return fmt.Errorf("handbook broadcast: lead update: %w", err)
+	}
+	o.lead.ResetContext(o.leadAgent.SystemPrompt())
+	o.disp.DispatchSummary(models.Message{
+		ProjectID: o.projectID,
+		Kind:      models.KindSystemEvent,
+		Tier:      models.TierSummary,
+		Content:   "📋 Handbook updated — all active agents have received the new handbook",
 	})
 	return nil
 }

@@ -28,6 +28,8 @@ import {
   PullOllamaModel as _PullOllamaModel,
   DeleteOllamaModel as _DeleteOllamaModel,
   InitFirstRun as _InitFirstRun,
+  GetHandbook as _GetHandbook,
+  SaveHandbook as _SaveHandbook,
   ResetAppData as _ResetAppData,
 } from '../../bindings/github.com/haepapa/kotui/internal/warroom/warroomservice';
 import type { BrainFiles as _BrainFiles, FirstRunResult as _FirstRunResult } from '../../bindings/github.com/haepapa/kotui/internal/warroom/models';
@@ -100,6 +102,14 @@ export function getCompanyIdentity(): Promise<string> {
 
 export function saveCompanyIdentity(content: string): Promise<void> {
   return _SaveCompanyIdentity(content);
+}
+
+export function getHandbook(): Promise<string> {
+  return _GetHandbook();
+}
+
+export function saveHandbook(content: string): Promise<void> {
+  return _SaveHandbook(content);
 }
 
 export function getOrCreateDirectConversation(agentID: string): Promise<string> {

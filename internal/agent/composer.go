@@ -20,7 +20,7 @@ var embeddedFiles embed.FS
 //  7. MCP tool fragment — available tools for this agent's clearance level
 //
 // The assembled prompt is written to instruction.md and returned.
-func compose(paths IdentityPaths, agentID, companyIdentityPath, mcpFragment, pastExperience string) (string, error) {
+func compose(paths IdentityPaths, agentID, companyIdentityPath, handbookPath, mcpFragment, pastExperience string) (string, error) {
 	var sb strings.Builder
 
 	// 0. Sticky agent identity header — placed first so the model always has its
@@ -37,12 +37,21 @@ func compose(paths IdentityPaths, agentID, companyIdentityPath, mcpFragment, pas
 	sb.WriteString(companyIdentity)
 	sb.WriteString("\n\n---\n\n")
 
-	// 2. Handbook (embedded)
-	handbook, err := embeddedFiles.ReadFile("embedded/handbook.md")
-	if err != nil {
-		return "", fmt.Errorf("compose: read handbook: %w", err)
+	// 2. Handbook — prefer user-edited copy on disk, fall back to embedded.
+	var handbookContent string
+	if handbookPath != "" {
+		if data, err := os.ReadFile(handbookPath); err == nil {
+			handbookContent = string(data)
+		}
 	}
-	sb.WriteString(string(handbook))
+	if handbookContent == "" {
+		data, err := embeddedFiles.ReadFile("embedded/handbook.md")
+		if err != nil {
+			return "", fmt.Errorf("compose: read handbook: %w", err)
+		}
+		handbookContent = string(data)
+	}
+	sb.WriteString(handbookContent)
 	sb.WriteString("\n\n---\n\n")
 
 	// 3. Past Experience (recalled journal entries, if any)
@@ -198,10 +207,19 @@ func readIdentityFile(path, name string) (string, error) {
 // outside the agent package (e.g. the warroom service recomposing after a brain
 // file edit). It recompiles the system prompt from the source files and writes
 // the result to instruction.md.
-func ComposeInstruction(paths IdentityPaths, agentID, companyIdentityPath, mcpFragment string) error {
-	prompt, err := compose(paths, agentID, companyIdentityPath, mcpFragment, "")
+func ComposeInstruction(paths IdentityPaths, agentID, companyIdentityPath, handbookPath, mcpFragment string) error {
+	prompt, err := compose(paths, agentID, companyIdentityPath, handbookPath, mcpFragment, "")
 	if err != nil {
 		return fmt.Errorf("ComposeInstruction %s: %w", paths.Root, err)
 	}
 	return writeInstruction(paths, prompt)
+}
+
+// GetEmbeddedHandbook returns the embedded handbook.md content.
+func GetEmbeddedHandbook() (string, error) {
+	data, err := embeddedFiles.ReadFile("embedded/handbook.md")
+	if err != nil {
+		return "", fmt.Errorf("get embedded handbook: %w", err)
+	}
+	return string(data), nil
 }

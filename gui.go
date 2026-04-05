@@ -49,6 +49,7 @@ func runGUI(cfg config.Config, db *store.DB) {
 		DataDir:             cfg.App.DataDir,
 		SandboxRoot:         filepath.Join(cfg.App.DataDir, "sandbox"),
 		CompanyIdentityPath: "COMPANY_IDENTITY.md",
+		HandbookPath:        filepath.Join(cfg.App.DataDir, "handbook.md"),
 		AppConfig:           cfg,
 		OnBrainUpdate: func(agentID, file, summary string) {
 			if brainUpdateFn != nil {

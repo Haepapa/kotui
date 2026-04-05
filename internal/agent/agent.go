@@ -21,9 +21,10 @@ type Agent struct {
 	Model     string
 	ProjectID string
 
-	paths     IdentityPaths
-	dataDir   string
-	spawnedAt time.Time
+	paths       IdentityPaths
+	dataDir     string
+	spawnedAt   time.Time
+	handbookPath string
 
 	// instruction is the currently active compiled system prompt.
 	// It is fully replaced on Culture Update (never patched in-place).
@@ -39,6 +40,7 @@ type SpawnConfig struct {
 	ProjectID           string
 	DataDir             string
 	CompanyIdentityPath string // path to COMPANY_IDENTITY.md
+	HandbookPath        string // path to user-edited handbook.md; empty falls back to embedded
 	MCPFragment         string // tool descriptions from mcp.Engine.SystemPromptFragment()
 	PastExperience      string // recalled journal entries formatted by memory.FormatRecall
 }
@@ -57,17 +59,18 @@ func Spawn(cfg SpawnConfig) (*Agent, error) {
 	}
 
 	a := &Agent{
-		ID:        cfg.ID,
-		Name:      cfg.Name,
-		Role:      cfg.Role,
-		Model:     cfg.Model,
-		ProjectID: cfg.ProjectID,
-		paths:     paths,
-		dataDir:   cfg.DataDir,
-		spawnedAt: time.Now(),
+		ID:           cfg.ID,
+		Name:         cfg.Name,
+		Role:         cfg.Role,
+		Model:        cfg.Model,
+		ProjectID:    cfg.ProjectID,
+		paths:        paths,
+		dataDir:      cfg.DataDir,
+		spawnedAt:    time.Now(),
+		handbookPath: cfg.HandbookPath,
 	}
 
-	prompt, err := compose(paths, cfg.ID, cfg.CompanyIdentityPath, cfg.MCPFragment, cfg.PastExperience)
+	prompt, err := compose(paths, cfg.ID, cfg.CompanyIdentityPath, cfg.HandbookPath, cfg.MCPFragment, cfg.PastExperience)
 	if err != nil {
 		return nil, fmt.Errorf("agent.Spawn: compose prompt for %s: %w", cfg.ID, err)
 	}
@@ -86,11 +89,12 @@ func (a *Agent) SystemPrompt() string { return a.instruction }
 func (a *Agent) Clearance() models.Clearance { return RoleClearance(a.Role) }
 
 // CultureUpdate fully replaces the agent's instruction with a new prompt
-// that incorporates updated company values. This is a COMPLETE replacement,
-// not a patch — LLMs must receive the new system prompt on the next turn.
-// companyIdentityPath must point to the updated COMPANY_IDENTITY.md.
-func (a *Agent) CultureUpdate(companyIdentityPath, mcpFragment string) error {
-	prompt, err := compose(a.paths, a.ID, companyIdentityPath, mcpFragment, "")
+// that incorporates updated company values or handbook. This is a COMPLETE
+// replacement, not a patch — LLMs must receive the new system prompt on the
+// next turn. companyIdentityPath must point to the updated COMPANY_IDENTITY.md.
+func (a *Agent) CultureUpdate(companyIdentityPath, handbookPath, mcpFragment string) error {
+	a.handbookPath = handbookPath
+	prompt, err := compose(a.paths, a.ID, companyIdentityPath, handbookPath, mcpFragment, "")
 	if err != nil {
 		return fmt.Errorf("agent.CultureUpdate %s: %w", a.ID, err)
 	}

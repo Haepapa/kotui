@@ -167,7 +167,7 @@ func TestCultureUpdate_ReplacesInstruction(t *testing.T) {
 
 	oldPrompt := a.SystemPrompt()
 
-	if err := a.CultureUpdate(ciPath, ""); err != nil {
+	if err := a.CultureUpdate(ciPath, "", ""); err != nil {
 		t.Fatalf("CultureUpdate: %v", err)
 	}
 

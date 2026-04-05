@@ -120,6 +120,14 @@ export function GetConfig(): $CancellablePromise<$models.UIConfig> {
 }
 
 /**
+ * GetHandbook returns the content of handbook.md.
+ * When no user-edited copy exists on disk, the embedded handbook is returned.
+ */
+export function GetHandbook(): $CancellablePromise<string> {
+    return $Call.ByID(1655511949);
+}
+
+/**
  * GetHeartbeat returns the current heartbeat state snapshot.
  */
 export function GetHeartbeat(): $CancellablePromise<$models.HeartbeatState> {
@@ -238,6 +246,13 @@ export function SaveCompanyIdentity(content: string): $CancellablePromise<void> 
  */
 export function SaveConfig(uiCfg: $models.UIConfig): $CancellablePromise<void> {
     return $Call.ByID(2733362488, uiCfg);
+}
+
+/**
+ * SaveHandbook writes handbook.md and triggers HandbookBroadcast.
+ */
+export function SaveHandbook(content: string): $CancellablePromise<void> {
+    return $Call.ByID(2139692174, content);
 }
 
 /**

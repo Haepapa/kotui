@@ -92,6 +92,7 @@ type WarRoomService struct {
 	cfg                 config.Config
 	cfgPath             string
 	companyIdentityPath string
+	handbookPath        string
 
 	mu           sync.RWMutex
 	activeConvID string
@@ -153,6 +154,7 @@ func New(
 		cfg:                 cfg,
 		cfgPath:             cfgPath,
 		companyIdentityPath: companyIdentityPath,
+		handbookPath:        filepath.Join(cfg.App.DataDir, "handbook.md"),
 		ollamaHealthy:       true, // optimistic default; corrected by first health check
 		registry:            agent.NewIdentityRegistry(),
 		heartbeat: HeartbeatState{
@@ -925,6 +927,35 @@ func (s *WarRoomService) SaveCompanyIdentity(ctx context.Context, content string
 	return nil
 }
 
+// GetHandbook returns the content of handbook.md.
+// When no user-edited copy exists on disk, the embedded handbook is returned.
+func (s *WarRoomService) GetHandbook(ctx context.Context) (string, error) {
+	data, err := os.ReadFile(s.handbookPath)
+	if os.IsNotExist(err) {
+		return agent.GetEmbeddedHandbook()
+	}
+	if err != nil {
+		return "", fmt.Errorf("warroom: read handbook: %w", err)
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return agent.GetEmbeddedHandbook()
+	}
+	return string(data), nil
+}
+
+// SaveHandbook writes handbook.md and triggers HandbookBroadcast.
+func (s *WarRoomService) SaveHandbook(ctx context.Context, content string) error {
+	if err := os.WriteFile(s.handbookPath, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("warroom: write handbook: %w", err)
+	}
+	if s.orch != nil {
+		if err := s.orch.HandbookBroadcast(s.handbookPath); err != nil {
+			return fmt.Errorf("warroom: handbook broadcast: %w", err)
+		}
+	}
+	return nil
+}
+
 // ResetAppData wipes all user data and resets the configuration to defaults.
 // This deletes all chat history, projects, agents, agent identity files, and
 // resets config.toml. The caller must restart (or reload) the app afterwards.
@@ -1028,7 +1059,7 @@ func (s *WarRoomService) SaveAgentBrainFile(ctx context.Context, agentID, fileKe
 	// Recompose instruction.md from the updated source files.
 	if s.orch != nil {
 		mcpFrag := s.orch.MCPFragmentForAgent(agentID)
-		if err := agent.ComposeInstruction(paths, agentID, s.companyIdentityPath, mcpFrag); err != nil {
+		if err := agent.ComposeInstruction(paths, agentID, s.companyIdentityPath, s.handbookPath, mcpFrag); err != nil {
 			// Non-fatal: log and continue — the old instruction is still usable.
 			s.app.Event.Emit("kotui:error", map[string]string{"error": "brain recompose: " + err.Error()})
 		}
