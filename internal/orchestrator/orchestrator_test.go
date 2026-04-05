@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/internal/orchestrator"
@@ -316,5 +318,201 @@ This is the prose part.`
 	}
 	if !strings.Contains(stripped, "prose part") {
 		t.Errorf("stripped text should preserve prose: %q", stripped)
+	}
+}
+
+// --- CogQueue -------------------------------------------------------------
+
+func newTestQueue(t *testing.T) *orchestrator.CogQueue {
+	t.Helper()
+	q := orchestrator.NewCogQueueForTest(nil)
+	q.Start(context.Background())
+	return q
+}
+
+func TestCogQueue_SingleSubmitCompletes(t *testing.T) {
+	q := newTestQueue(t)
+	ran := false
+	_, err := q.Submit(context.Background(), orchestrator.ExportedP1Lead, func(_ context.Context) error {
+		ran = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if !ran {
+		t.Error("fn was not executed")
+	}
+}
+
+func TestCogQueue_ErrorPropagates(t *testing.T) {
+	q := newTestQueue(t)
+	want := errors.New("boom")
+	_, err := q.Submit(context.Background(), orchestrator.ExportedP1Lead, func(_ context.Context) error {
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Errorf("expected %v, got %v", want, err)
+	}
+}
+
+func TestCogQueue_Serialisation(t *testing.T) {
+	// Two concurrent submits must not overlap.
+	q := newTestQueue(t)
+	const n = 5
+	var inFlight atomic.Int32
+	var maxConcurrent atomic.Int32
+
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			q.Submit(context.Background(), orchestrator.ExportedP1Lead, func(_ context.Context) error {
+				cur := inFlight.Add(1)
+				if cur > maxConcurrent.Load() {
+					maxConcurrent.Store(cur)
+				}
+				time.Sleep(5 * time.Millisecond)
+				inFlight.Add(-1)
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+	if got := maxConcurrent.Load(); got > 1 {
+		t.Errorf("expected max concurrency 1, got %d", got)
+	}
+}
+
+func TestCogQueue_PriorityOrdering(t *testing.T) {
+	// Fill the queue with P3 items, then submit a P1 item.
+	// The P1 item must run before the remaining P3 items.
+	ctx := context.Background()
+
+	// Use a blocking gate so we can control when items actually run.
+	gate := make(chan struct{})
+	var order []int
+	var mu sync.Mutex
+
+	q := orchestrator.NewCogQueueForTest(nil)
+	q.Start(ctx)
+
+	// Submit a P3 blocker first — it holds the gate open.
+	var p3Started sync.WaitGroup
+	p3Started.Add(1)
+	go q.Submit(ctx, orchestrator.ExportedP3Background, func(_ context.Context) error {
+		p3Started.Done() // signal that P3 is running
+		<-gate           // block until released
+		mu.Lock()
+		order = append(order, 30)
+		mu.Unlock()
+		return nil
+	})
+	p3Started.Wait() // wait until the first P3 is actually running
+
+	// Now queue: P3, P3, P1 — the P1 should run before the P3s.
+	var submitted sync.WaitGroup
+	submitted.Add(3)
+	go func() {
+		submitted.Done()
+		q.Submit(ctx, orchestrator.ExportedP3Background, func(_ context.Context) error {
+			mu.Lock(); order = append(order, 31); mu.Unlock()
+			return nil
+		})
+	}()
+	go func() {
+		submitted.Done()
+		q.Submit(ctx, orchestrator.ExportedP3Background, func(_ context.Context) error {
+			mu.Lock(); order = append(order, 32); mu.Unlock()
+			return nil
+		})
+	}()
+	go func() {
+		submitted.Done()
+		q.Submit(ctx, orchestrator.ExportedP1Lead, func(_ context.Context) error {
+			mu.Lock(); order = append(order, 1); mu.Unlock()
+			return nil
+		})
+	}()
+	submitted.Wait()
+	// Give goroutines a moment to enqueue before releasing the gate.
+	time.Sleep(20 * time.Millisecond)
+
+	close(gate) // release the blocker
+
+	// Wait for all 4 items to finish (1 blocker + 3 queued).
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) < 4 {
+		t.Fatalf("expected 4 completed items, got %d: %v", len(order), order)
+	}
+	// The P1 item (value 1) must appear before both remaining P3 items (31, 32).
+	p1Idx := -1
+	for i, v := range order {
+		if v == 1 {
+			p1Idx = i
+			break
+		}
+	}
+	if p1Idx < 0 {
+		t.Fatal("P1 item never ran")
+	}
+	for _, v := range []int{31, 32} {
+		for i, o := range order {
+			if o == v && i < p1Idx {
+				t.Errorf("P3 item %d ran before P1 (P1 at index %d, P3 at index %d): order=%v", v, p1Idx, i, order)
+			}
+		}
+	}
+}
+
+func TestCogQueue_ContextCancellationBeforeEnqueue(t *testing.T) {
+	q := newTestQueue(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	_, err := q.Submit(ctx, orchestrator.ExportedP1Lead, func(_ context.Context) error {
+		return nil
+	})
+	if err == nil {
+		t.Error("expected context.Canceled, got nil")
+	}
+}
+
+func TestCogQueue_StateReflectsWaiting(t *testing.T) {
+	q := newTestQueue(t)
+	gate := make(chan struct{})
+
+	// Submit a blocking item to occupy the queue.
+	go q.Submit(context.Background(), orchestrator.ExportedP1Lead, func(_ context.Context) error {
+		<-gate
+		return nil
+	})
+	// Give the dispatcher a moment to start running the fn.
+	time.Sleep(10 * time.Millisecond)
+
+	// Submit two more at different priorities without waiting.
+	go q.Submit(context.Background(), orchestrator.ExportedP1Lead, func(_ context.Context) error { return nil })
+	go q.Submit(context.Background(), orchestrator.ExportedP3Background, func(_ context.Context) error { return nil })
+	time.Sleep(10 * time.Millisecond)
+
+	state := q.State()
+	if !state.Active {
+		t.Error("expected Active=true while fn is running")
+	}
+	if state.P1 < 1 {
+		t.Errorf("expected at least 1 waiting at P1, got %d", state.P1)
+	}
+	if state.P3 < 1 {
+		t.Errorf("expected at least 1 waiting at P3, got %d", state.P3)
+	}
+
+	close(gate) // let it finish
+	time.Sleep(50 * time.Millisecond)
+	if q.State().Active {
+		t.Error("expected Active=false after completion")
 	}
 }

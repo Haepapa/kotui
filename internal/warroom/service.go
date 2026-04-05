@@ -1038,6 +1038,20 @@ func (s *WarRoomService) EmitBrainUpdate(ctx context.Context, agentID, file, sum
 	}
 }
 
+// EmitQueueState fires a kotui:queue_state event so the frontend can display
+// the current cognition queue depth and activity. Called from the orchestrator's
+// OnQueueState callback on every enqueue/dequeue/execution state change.
+// This method must be non-blocking — it is called from the queue dispatcher goroutine.
+func (s *WarRoomService) EmitQueueState(p0, p1, p2, p3 int, active bool) {
+	s.app.Event.Emit("kotui:queue_state", map[string]any{
+		"p0":     p0,
+		"p1":     p1,
+		"p2":     p2,
+		"p3":     p3,
+		"active": active,
+	})
+}
+
 // writeDefaultConfig encodes cfg as TOML to path, creating parent directories as needed.
 func writeDefaultConfig(path string, cfg config.Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -37,9 +37,10 @@ func runGUI(cfg config.Config, db *store.DB) {
 		memStore = memory.New(db, ollamaClient, cfg.Models.Embedder, slog.Default())
 	}
 
-	// brainUpdateFn is set after svc is created; the orchestrator's update_self
-	// MCP tool calls back through this closure to notify the service.
+	// brainUpdateFn and queueStateFn are set after svc is created; the
+	// orchestrator callbacks reach through these closures to notify the service.
 	var brainUpdateFn func(agentID, file, summary string)
+	var queueStateFn func(qs orchestrator.QueueState)
 
 	orchCfg := orchestrator.OrchestratorConfig{
 		LeadModel:           cfg.Models.Lead,
@@ -52,6 +53,11 @@ func runGUI(cfg config.Config, db *store.DB) {
 		OnBrainUpdate: func(agentID, file, summary string) {
 			if brainUpdateFn != nil {
 				brainUpdateFn(agentID, file, summary)
+			}
+		},
+		OnQueueState: func(qs orchestrator.QueueState) {
+			if queueStateFn != nil {
+				queueStateFn(qs)
 			}
 		},
 	}
@@ -100,9 +106,12 @@ func runGUI(cfg config.Config, db *store.DB) {
 	})
 
 	wrService := warroom.New(app, db, orch, disp, cfg, config.ConfigPath(), "COMPANY_IDENTITY.md", memStore)
-	// Wire the brain-update callback now that the service is available.
+	// Wire callbacks now that the service is available.
 	brainUpdateFn = func(agentID, file, summary string) {
 		wrService.EmitBrainUpdate(context.Background(), agentID, file, summary)
+	}
+	queueStateFn = func(qs orchestrator.QueueState) {
+		wrService.EmitQueueState(qs.P0, qs.P1, qs.P2, qs.P3, qs.Active)
 	}
 	app.RegisterService(application.NewServiceWithOptions(wrService, application.ServiceOptions{
 		Name: "WarRoom",

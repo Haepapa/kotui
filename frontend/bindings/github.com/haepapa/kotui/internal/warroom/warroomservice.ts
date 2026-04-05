@@ -63,6 +63,16 @@ export function EmitBrainUpdate(agentID: string, file: string, summary: string):
 }
 
 /**
+ * EmitQueueState fires a kotui:queue_state event so the frontend can display
+ * the current cognition queue depth and activity. Called from the orchestrator's
+ * OnQueueState callback on every enqueue/dequeue/execution state change.
+ * This method must be non-blocking — it is called from the queue dispatcher goroutine.
+ */
+export function EmitQueueState(p0: number, p1: number, p2: number, p3: number, active: boolean): $CancellablePromise<void> {
+    return $Call.ByID(2488856920, p0, p1, p2, p3, active);
+}
+
+/**
  * GetActiveConversation returns the conversation ID for the active project.
  */
 export function GetActiveConversation(): $CancellablePromise<string> {

@@ -27,3 +27,17 @@ func NewRunningAgentForTest(id, name, model string, clearance models.Clearance, 
 func NewVRAMCoordinatorForTest(profile models.VRAMProfile, inf Inferrer, leadModel string) *VRAMCoordinator {
 	return newVRAMCoordinator(profile, inf, leadModel)
 }
+
+// NewCogQueueForTest creates a CogQueue with an optional state callback.
+// The caller must call Start with an appropriate context before submitting.
+func NewCogQueueForTest(onState func(QueueState)) *CogQueue {
+	return NewCogQueue(onState)
+}
+
+// ExportedCogPriorities exposes the priority constants for black-box tests.
+var (
+	ExportedP0Emergency   = P0Emergency
+	ExportedP1Lead        = P1Lead
+	ExportedP2Interactive = P2Interactive
+	ExportedP3Background  = P3Background
+)

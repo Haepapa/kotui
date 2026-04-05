@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/haepapa/kotui/internal/agent"
@@ -47,6 +46,11 @@ type OrchestratorConfig struct {
 	// The caller (typically WarRoomService) uses this to recompose
 	// instruction.md and emit a brain-update notification to the frontend.
 	OnBrainUpdate func(agentID, file, summary string)
+
+	// OnQueueState, if non-nil, is called after every cognition queue state
+	// change (enqueue, dequeue, execution start/stop). Use it to push a
+	// kotui:queue_state event to the frontend.
+	OnQueueState func(QueueState)
 }
 
 // Orchestrator coordinates all agents, tools, and communication.
@@ -75,10 +79,9 @@ type Orchestrator struct {
 	dmAgents   map[string]*RunningAgent
 	dmAgentsMu sync.Mutex
 
-	// dmInferenceMu serialises DM inference so only one Ollama call runs at a time.
-	// Concurrent DM messages are queued; each caller receives a "queued" log line.
-	dmInferenceMu sync.Mutex
-	dmQueueCount  atomic.Int32 // number of callers waiting for dmInferenceMu
+	// cogQueue serialises all Ollama inference calls with P0→P3 priority.
+	// Replaces the old dmInferenceMu/dmQueueCount pair.
+	cogQueue *CogQueue
 
 	projectID string
 	convID    string
@@ -151,6 +154,7 @@ func New(
 		vram:      vram,
 		escalator: escalator,
 		hiring:    hiringMgr,
+		cogQueue:  NewCogQueue(cfg.OnQueueState),
 	}
 
 	// Build memory store if embedder model is configured.
@@ -162,6 +166,10 @@ func New(
 			o.memory = memory.New(db, emb, cfg.EmbedderModel, log)
 		}
 	}
+
+	// Start the cognition queue. It runs for the lifetime of the process
+	// (background context) since there is no explicit orchestrator shutdown.
+	o.cogQueue.Start(context.Background())
 
 	return o, nil
 }
@@ -375,57 +383,59 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 	// identity changes and tool calls before composing its reply.
 	augmented = dmTurnPrompt(augmented)
 
-	// Serialise DM inference — only one Ollama call runs at a time.
-	// If Ollama is busy, notify the user and wait in the queue.
-	if !o.dmInferenceMu.TryLock() {
-		pos := o.dmQueueCount.Add(1)
+	// Notify the user if they'll have to wait — check state before enqueuing
+	// so the message appears immediately rather than after the current call ends.
+	if qs := o.cogQueue.State(); qs.Active || qs.P1 > 0 {
+		waitPos := qs.P1 + 1
 		o.disp.Dispatch(models.Message{
 			ProjectID:      o.projectID,
 			ConversationID: convID,
 			AgentID:        agentID,
 			Kind:           models.KindSystemEvent,
 			Tier:           models.TierRaw,
-			Content:        fmt.Sprintf("⏳ queued (position %d) — waiting for Ollama to finish current call", pos),
+			Content:        fmt.Sprintf("⏳ queued (position %d) — waiting for Ollama to finish current call", waitPos),
 		})
-		o.dmInferenceMu.Lock() // blocks until the current call finishes
-		o.dmQueueCount.Add(-1)
 	}
-	defer o.dmInferenceMu.Unlock()
 
-	// Route all raw activity from TurnStream (API calls, tool calls, errors)
-	// to the DM conversation's EngineRoom.
-	ra.OnRaw = func(kind models.MessageKind, content string) {
+	// Submit to the cognition queue at P1 (Boss-level priority).
+	// Blocks until the fn executes and returns.
+	_, err := o.cogQueue.Submit(ctx, P1Lead, func(qctx context.Context) error {
+		// Route all raw activity from TurnStream (API calls, tool calls, errors)
+		// to the DM conversation's EngineRoom.
+		ra.OnRaw = func(kind models.MessageKind, content string) {
+			o.disp.Dispatch(models.Message{
+				ProjectID:      o.projectID,
+				ConversationID: convID,
+				AgentID:        agentID,
+				Kind:           kind,
+				Tier:           models.TierRaw,
+				Content:        content,
+			})
+		}
+		defer func() { ra.OnRaw = nil }()
+
+		// Apply a per-call watchdog: if inference runs longer than 30 minutes
+		// the context is cancelled and an error is returned.
+		watchdogCtx, watchdogCancel := context.WithTimeout(qctx, 30*time.Minute)
+		defer watchdogCancel()
+
+		response, err := ra.TurnStream(watchdogCtx, augmented, onChunk)
+		if err != nil {
+			return fmt.Errorf("dm %s: %w", agentID, err)
+		}
+
+		// Dispatch the agent reply to the DM conversation.
 		o.disp.Dispatch(models.Message{
 			ProjectID:      o.projectID,
 			ConversationID: convID,
 			AgentID:        agentID,
-			Kind:           kind,
-			Tier:           models.TierRaw,
-			Content:        content,
+			Kind:           models.KindAgentMessage,
+			Tier:           models.TierSummary,
+			Content:        response,
 		})
-	}
-	defer func() { ra.OnRaw = nil }()
-
-	// Apply a per-call watchdog: if inference runs longer than 30 minutes the
-	// context is cancelled and an error is returned to the caller.
-	watchdogCtx, watchdogCancel := context.WithTimeout(ctx, 30*time.Minute)
-	defer watchdogCancel()
-
-	response, err := ra.TurnStream(watchdogCtx, augmented, onChunk)
-	if err != nil {
-		return fmt.Errorf("dm %s: %w", agentID, err)
-	}
-
-	// Dispatch the agent reply to the DM conversation (not the war-room convID).
-	o.disp.Dispatch(models.Message{
-		ProjectID:      o.projectID,
-		ConversationID: convID,
-		AgentID:        agentID,
-		Kind:           models.KindAgentMessage,
-		Tier:           models.TierSummary,
-		Content:        response,
+		return nil
 	})
-	return nil
+	return err
 }
 
 // agentIdentityForDM returns the model, clearance, and compiled system prompt
