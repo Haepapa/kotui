@@ -31,11 +31,13 @@ import {
   GetHandbook as _GetHandbook,
   SaveHandbook as _SaveHandbook,
   ResetAppData as _ResetAppData,
+  ListSandboxFiles as _ListSandboxFiles,
+  ReadSandboxFile as _ReadSandboxFile,
 } from '../../bindings/github.com/haepapa/kotui/internal/warroom/warroomservice';
 import type { BrainFiles as _BrainFiles, FirstRunResult as _FirstRunResult } from '../../bindings/github.com/haepapa/kotui/internal/warroom/models';
 
 import { Events } from '@wailsio/runtime';
-import type { AgentInfo, Approval, HeartbeatState, KotuiMessage, Project, UIConfig } from './types';
+import type { AgentInfo, Approval, FileEntry, HeartbeatState, KotuiMessage, Project, UIConfig } from './types';
 
 // --- Service method wrappers -------------------------------------------
 
@@ -198,4 +200,16 @@ export type BrainUpdatePayload = {
 
 export function onBrainUpdate(handler: (payload: BrainUpdatePayload) => void): () => void {
   return Events.On('kotui:brain_update', (ev) => handler(ev.data as BrainUpdatePayload));
+}
+
+export function onFileWritten(handler: (payload: { path: string }) => void): () => void {
+  return Events.On('kotui:file_written', (ev) => handler(ev.data as { path: string }));
+}
+
+export function listSandboxFiles(): Promise<FileEntry[]> {
+  return _ListSandboxFiles() as Promise<FileEntry[]>;
+}
+
+export function readSandboxFile(relPath: string): Promise<string> {
+  return _ReadSandboxFile(relPath);
 }

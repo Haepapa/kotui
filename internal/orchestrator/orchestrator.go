@@ -110,7 +110,15 @@ func New(
 
 	// Build MCP engine sandboxed to the project workspace.
 	mcpEng := mcp.New(cfg.SandboxRoot)
-	if err := tools.RegisterAllWithHooks(mcpEng, cfg.AppConfig, cfg.OnBrainUpdate); err != nil {
+
+	// Use a dispatchRef indirection so the file-write hook can reference the
+	// orchestrator (o) even though it is created after tool registration.
+	var dispatchFileWrite func(path string)
+	if err := tools.RegisterAllWithHooks(mcpEng, cfg.AppConfig, cfg.OnBrainUpdate, func(path string) {
+		if dispatchFileWrite != nil {
+			dispatchFileWrite(path)
+		}
+	}); err != nil {
 		return nil, fmt.Errorf("orchestrator: register tools: %w", err)
 	}
 
@@ -163,6 +171,20 @@ func New(
 		escalator: escalator,
 		hiring:    hiringMgr,
 		cogQueue:  NewCogQueue(cfg.OnQueueState, ollama.NewSystemMonitor()),
+	}
+
+	// Now that o exists, wire the file-write hook to dispatch KindFileCreated messages.
+	dispatchFileWrite = func(path string) {
+		if o.projectID == "" || o.convID == "" {
+			return
+		}
+		o.disp.DispatchSummary(models.Message{
+			ProjectID:      o.projectID,
+			ConversationID: o.convID,
+			Kind:           models.KindFileCreated,
+			Tier:           models.TierSummary,
+			Content:        path,
+		})
 	}
 
 	// Build memory store if embedder model is configured.

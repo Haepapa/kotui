@@ -88,6 +88,53 @@ export class BrainFiles {
 }
 
 /**
+ * FileEntry describes a file or directory in the agent workspace.
+ */
+export class FileEntry {
+    /**
+     * relative to sandbox root
+     */
+    "path": string;
+    "name": string;
+    "size": number;
+    "is_dir": boolean;
+
+    /**
+     * RFC3339
+     */
+    "mod_time": string;
+
+    /** Creates a new FileEntry instance. */
+    constructor($$source: Partial<FileEntry> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("size" in $$source)) {
+            this["size"] = 0;
+        }
+        if (!("is_dir" in $$source)) {
+            this["is_dir"] = false;
+        }
+        if (!("mod_time" in $$source)) {
+            this["mod_time"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FileEntry instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FileEntry {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FileEntry($$parsedSource as Partial<FileEntry>);
+    }
+}
+
+/**
  * FirstRunResult is returned by InitFirstRun.
  */
 export class FirstRunResult {

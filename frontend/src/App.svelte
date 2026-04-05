@@ -7,6 +7,7 @@
   import Settings from './components/Settings.svelte';
   import CompanyIdentityEditor from './components/CompanyIdentityEditor.svelte';
   import BrainPanel from './components/BrainPanel.svelte';
+  import FileBrowser from './components/FileBrowser.svelte';
   import {
     wr,
     initWarRoom,
@@ -65,6 +66,7 @@
   const channelTitle = $derived(() => {
     if (wr.activeView === 'settings') return 'Infrastructure Office';
     if (wr.activeView === 'identity') return 'Company Identity';
+    if (wr.activeView === 'files') return 'Agent Files';
     if (wr.activeView === 'dm') return `@ ${agentName(wr.activeDMAgentID)}`;
     return null;
   });
@@ -114,6 +116,8 @@
           <!-- no title — identity editor has its own heading -->
         {:else if wr.activeView === 'brain'}
           <!-- no title — brain panel has its own heading -->
+        {:else if wr.activeView === 'files'}
+          <span class="channel-name">Agent Files</span>
         {:else if wr.activeView === 'dm'}
           <span class="channel-hash">@</span>
           <span class="channel-name">{agentName(wr.activeDMAgentID)}</span>
@@ -170,6 +174,8 @@
         <CompanyIdentityEditor />
       {:else if wr.activeView === 'brain'}
         <BrainPanel agentID={wr.activeBrainAgentID} />
+      {:else if wr.activeView === 'files'}
+        <FileBrowser />
       {:else if wr.activeView === 'dm'}
         <ChatArea
           messages={dmVisibleMsgs}

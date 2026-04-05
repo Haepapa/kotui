@@ -56,6 +56,7 @@ const (
 	KindSystemEvent  MessageKind = "system_event"
 	KindDraft        MessageKind = "draft"        // Lead-internal, not shown to Boss
 	KindConsultation MessageKind = "consultation" // Agent seeking clarification (CS < 0.7)
+	KindFileCreated  MessageKind = "file_created" // Agent wrote a file to the sandbox
 )
 
 // Clearance represents an agent's permission tier within the MCP framework.

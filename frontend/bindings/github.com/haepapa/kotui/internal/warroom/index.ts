@@ -9,6 +9,7 @@ export {
 export {
     AgentInfo,
     BrainFiles,
+    FileEntry,
     FirstRunResult,
     HeartbeatState,
     UIConfig

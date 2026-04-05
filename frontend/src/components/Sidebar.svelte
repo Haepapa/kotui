@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createProject, switchProject, getActiveConversation, getMessages, getProjects } from '../lib/warroom';
-  import { wr, openDM, refreshApprovals, renameChannel, archiveChannel } from '../stores/warroom.svelte';
+  import { wr, openDM, refreshApprovals, renameChannel, archiveChannel, goToFiles } from '../stores/warroom.svelte';
   import ApprovalCard from './ApprovalCard.svelte';
 
   let showNewProject = $state(false);
@@ -271,6 +271,26 @@
         {/each}
       </nav>
     {/if}
+
+    <!-- Files -->
+    <nav class="nav-section">
+      <div class="nav-label">Workspace</div>
+      <button
+        class="nav-item"
+        class:active={wr.activeView === 'files'}
+        onclick={goToFiles}
+        title="Browse files created by agents"
+      >
+        {#if wr.activeView === 'files'}
+          <span class="active-pip"></span>
+        {/if}
+        <span class="nav-hash">📁</span>
+        <span class="nav-item-text">Files</span>
+        {#if wr.files.filter(f => !f.is_dir).length > 0}
+          <span class="unread-badge">{wr.files.filter(f => !f.is_dir).length}</span>
+        {/if}
+      </button>
+    </nav>
   </div>
 </aside>
 

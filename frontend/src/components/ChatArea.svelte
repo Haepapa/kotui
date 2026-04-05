@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { KotuiMessage, ViewMode, HeartbeatState, QueueState } from '../lib/types';
   import { sendBossCommand, sendDirectMessage } from '../lib/warroom';
-  import { wr, agentName } from '../stores/warroom.svelte';
+  import { wr, agentName, goToFiles } from '../stores/warroom.svelte';
 
   interface Props {
     messages: KotuiMessage[];
@@ -261,6 +261,18 @@
               <p class="bubble-text">{msg.content}</p>
             </div>
           </div>
+        </div>
+      {:else if msg.kind === 'file_created'}
+        <!-- File created card — always visible regardless of viewMode -->
+        <div class="file-card">
+          <span class="file-card-icon">📄</span>
+          <div class="file-card-info">
+            <span class="file-card-name">{msg.content.split('/').pop()}</span>
+            <span class="file-card-path">{msg.content}</span>
+          </div>
+          <button class="file-view-btn" onclick={goToFiles} title="Browse workspace files">
+            📂 Browse
+          </button>
         </div>
       {:else}
         <!-- Agent bubble — left aligned -->
@@ -596,6 +608,56 @@
     font-size: 0.8125rem;
     color: var(--text-muted);
   }
+
+  /* File-created card — compact bordered widget, not a chat bubble */
+  .file-card {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.875rem;
+    margin: 0.375rem 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    max-width: 480px;
+  }
+  .file-card-icon { font-size: 1.25rem; flex-shrink: 0; }
+  .file-card-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .file-card-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .file-card-path {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'Menlo', 'Monaco', monospace;
+  }
+  .file-view-btn {
+    flex-shrink: 0;
+    padding: 0.3rem 0.625rem;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-input);
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s, color 0.12s;
+  }
+  .file-view-btn:hover { background: var(--accent-btn); color: #e0e9ff; border-color: var(--accent-btn-hover); }
 
   .copy-btn {
     display: inline-flex;

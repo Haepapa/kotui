@@ -204,12 +204,31 @@ export function ListOllamaModels(endpoint: string): $CancellablePromise<string[]
 }
 
 /**
+ * ListSandboxFiles returns the files and directories in the agent workspace.
+ * The list is sorted: directories first (alphabetically), then files.
+ * Returns an empty slice (not an error) when the sandbox does not exist yet.
+ */
+export function ListSandboxFiles(): $CancellablePromise<$models.FileEntry[]> {
+    return $Call.ByID(1919929905).then(($result: any) => {
+        return $$createType15($result);
+    });
+}
+
+/**
  * PullOllamaModel pulls a model by name from the Ollama registry.
  * Pass an empty endpoint to use the configured local endpoint.
  * Pull can take several minutes.
  */
 export function PullOllamaModel(endpoint: string, name: string): $CancellablePromise<void> {
     return $Call.ByID(2538362535, endpoint, name);
+}
+
+/**
+ * ReadSandboxFile returns the text content of a file in the agent workspace.
+ * Returns an error if the resolved path escapes the sandbox or the file exceeds 512 KB.
+ */
+export function ReadSandboxFile(relPath: string): $CancellablePromise<string> {
+    return $Call.ByID(3782088252, relPath);
 }
 
 /**
@@ -315,3 +334,5 @@ const $$createType10 = $Create.Array($$createType9);
 const $$createType11 = $Create.Array($$createType0);
 const $$createType12 = $models.FirstRunResult.createFrom;
 const $$createType13 = $Create.Array($Create.Any);
+const $$createType14 = $models.FileEntry.createFrom;
+const $$createType15 = $Create.Array($$createType14);

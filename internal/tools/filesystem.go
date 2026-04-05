@@ -32,7 +32,7 @@ var filesystemSchema = json.RawMessage(`{
 	}
 }`)
 
-func filesystemTool(box *mcp.Sandbox) mcp.ToolDef {
+func filesystemTool(box *mcp.Sandbox, onFileWrite func(string)) mcp.ToolDef {
 	return mcp.ToolDef{
 		Name:      "filesystem",
 		Clearance: models.ClearanceSpecialist,
@@ -40,11 +40,11 @@ func filesystemTool(box *mcp.Sandbox) mcp.ToolDef {
 			"All paths are sandboxed to the active project directory. " +
 			"Delete always creates a .kotui_bak backup first.",
 		Schema:  filesystemSchema,
-		Handler: filesystemHandler(box),
+		Handler: filesystemHandler(box, onFileWrite),
 	}
 }
 
-func filesystemHandler(box *mcp.Sandbox) mcp.Handler {
+func filesystemHandler(box *mcp.Sandbox, onFileWrite func(string)) mcp.Handler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
 		op, _ := args["operation"].(string)
 		path, _ := args["path"].(string)
@@ -59,7 +59,7 @@ func filesystemHandler(box *mcp.Sandbox) mcp.Handler {
 			return fsRead(resolved, path)
 		case "write":
 			content, _ := args["content"].(string)
-			return fsWrite(resolved, path, content)
+			return fsWrite(resolved, path, content, onFileWrite)
 		case "delete":
 			return fsDelete(box, resolved, path)
 		case "list":
@@ -78,12 +78,15 @@ func fsRead(resolved, displayPath string) (string, error) {
 	return string(data), nil
 }
 
-func fsWrite(resolved, displayPath, content string) (string, error) {
+func fsWrite(resolved, displayPath, content string, onFileWrite func(string)) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(resolved), 0o755); err != nil {
 		return "", fmt.Errorf("filesystem: mkdir for %s: %w", displayPath, err)
 	}
 	if err := os.WriteFile(resolved, []byte(content), 0o644); err != nil {
 		return "", fmt.Errorf("filesystem: write %s: %w", displayPath, err)
+	}
+	if onFileWrite != nil {
+		onFileWrite(displayPath)
 	}
 	return fmt.Sprintf("written %d bytes to %s", len(content), displayPath), nil
 }

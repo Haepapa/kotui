@@ -18,15 +18,17 @@ import {
   onChannelBusy,
   onChannelStream,
   onBrainUpdate,
+  onFileWritten,
   getPendingApprovals,
   getOrCreateDirectConversation,
   renameProject,
   archiveProject,
   createProject,
   initFirstRun,
+  listSandboxFiles,
 } from '../lib/warroom';
 import { Events } from '@wailsio/runtime';
-import type { AgentInfo, AppView, Approval, HeartbeatState, KotuiMessage, Project, QueueState, ViewMode } from '../lib/types';
+import type { AgentInfo, AppView, Approval, FileEntry, HeartbeatState, KotuiMessage, Project, QueueState, ViewMode } from '../lib/types';
 
 // --- Reactive state object ---
 
@@ -75,6 +77,9 @@ export const wr = $state({
   queueState: {
     p0: 0, p1: 0, p2: 0, p3: 0, active: false, throttled: false,
   } as QueueState,
+
+  // Agent workspace files — refreshed on mount and on kotui:file_written events.
+  files: [] as FileEntry[],
 });
 
 // --- Derived helpers (functions because .svelte.ts can't use $derived at module scope with runes) ---
@@ -126,6 +131,7 @@ let unsubAgents: (() => void) | null = null;
 let unsubChannelBusy: (() => void) | null = null;
 let unsubChannelStream: (() => void) | null = null;
 let unsubBrainUpdate: (() => void) | null = null;
+let unsubFileWritten: (() => void) | null = null;
 let unsubProjects: (() => void) | null = null;
 let unsubDMBusy: (() => void) | null = null;
 let unsubDMStream: (() => void) | null = null;
@@ -198,6 +204,11 @@ export async function initWarRoom() {
         wr.unreadDM[agent_id] = (wr.unreadDM[agent_id] ?? 0) + 1;
       }
     }
+  });
+
+  // Refresh the file list whenever the backend signals a new file write.
+  unsubFileWritten = onFileWritten(() => {
+    refreshFiles();
   });
 
   unsubHeartbeat = onHeartbeat((hb) => {
@@ -318,6 +329,7 @@ export function destroyWarRoom() {
   unsubChannelBusy?.();
   unsubChannelStream?.();
   unsubBrainUpdate?.();
+  unsubFileWritten?.();
   unsubProjects?.();
   unsubDMBusy?.();
   unsubDMStream?.();
@@ -415,5 +427,18 @@ export async function renameChannel(id: string, name: string, description: strin
 
 export async function archiveChannel(id: string): Promise<void> {
   await archiveProject(id);
+}
+
+export async function refreshFiles() {
+  try {
+    const files = await listSandboxFiles();
+    wr.files = files ?? [];
+  } catch (e) {
+    console.warn('refreshFiles:', e);
+  }
+}
+
+export function goToFiles() {
+  wr.activeView = 'files';
 }
 

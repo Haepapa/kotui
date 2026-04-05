@@ -93,4 +93,12 @@ export interface UIConfig {
   webhook_port: number;
 }
 
-export type AppView = 'chat' | 'settings' | 'identity' | 'dm' | 'brain';
+export type AppView = 'chat' | 'settings' | 'identity' | 'dm' | 'brain' | 'files';
+
+export interface FileEntry {
+  path: string;
+  name: string;
+  size: number;
+  is_dir: boolean;
+  mod_time: string;
+}

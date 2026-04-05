@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -328,6 +329,9 @@ func (s *WarRoomService) startEventBridge() {
 
 		s.app.Event.Emit("kotui:message", msg)
 		s.app.Event.Emit("kotui:heartbeat", snapshot)
+		if msg.Kind == models.KindFileCreated {
+			s.app.Event.Emit("kotui:file_written", map[string]any{"path": msg.Content})
+		}
 	})
 }
 
@@ -1347,4 +1351,91 @@ func joinBatch(msgs []string) string {
 		fmt.Fprintf(&sb, "Message %d:\n%s\n\n", i+1, m)
 	}
 	return strings.TrimRight(sb.String(), "\n")
+}
+
+// FileEntry describes a file or directory in the agent workspace.
+type FileEntry struct {
+	Path    string `json:"path"`     // relative to sandbox root
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
+	IsDir   bool   `json:"is_dir"`
+	ModTime string `json:"mod_time"` // RFC3339
+}
+
+// ListSandboxFiles returns the files and directories in the agent workspace.
+// The list is sorted: directories first (alphabetically), then files.
+// Returns an empty slice (not an error) when the sandbox does not exist yet.
+func (s *WarRoomService) ListSandboxFiles(ctx context.Context) ([]FileEntry, error) {
+	root := filepath.Join(s.cfg.App.DataDir, "sandbox")
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		return []FileEntry{}, nil
+	}
+
+	var dirs []FileEntry
+	var files []FileEntry
+
+	err := filepath.Walk(root, func(abs string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return nil // skip unreadable entries
+		}
+		if abs == root {
+			return nil // skip the root itself
+		}
+		rel, err := filepath.Rel(root, abs)
+		if err != nil {
+			return nil
+		}
+		entry := FileEntry{
+			Path:    rel,
+			Name:    info.Name(),
+			Size:    info.Size(),
+			IsDir:   info.IsDir(),
+			ModTime: info.ModTime().UTC().Format(time.RFC3339),
+		}
+		if info.IsDir() {
+			dirs = append(dirs, entry)
+		} else {
+			files = append(files, entry)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list sandbox files: %w", err)
+	}
+
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Path < dirs[j].Path })
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+
+	return append(dirs, files...), nil
+}
+
+// ReadSandboxFile returns the text content of a file in the agent workspace.
+// Returns an error if the resolved path escapes the sandbox or the file exceeds 512 KB.
+func (s *WarRoomService) ReadSandboxFile(ctx context.Context, relPath string) (string, error) {
+	const maxSize = 512 * 1024
+
+	root := filepath.Join(s.cfg.App.DataDir, "sandbox")
+	abs := filepath.Join(root, filepath.Clean(relPath))
+
+	// Ensure the resolved path stays inside the sandbox root.
+	if !strings.HasPrefix(abs, root+string(filepath.Separator)) && abs != root {
+		return "", fmt.Errorf("path escapes sandbox: %s", relPath)
+	}
+
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("read sandbox file: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("path is a directory: %s", relPath)
+	}
+	if info.Size() > maxSize {
+		return "", fmt.Errorf("file too large to preview (%.1f KB > 512 KB)", float64(info.Size())/1024)
+	}
+
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", fmt.Errorf("read sandbox file: %w", err)
+	}
+	return string(data), nil
 }

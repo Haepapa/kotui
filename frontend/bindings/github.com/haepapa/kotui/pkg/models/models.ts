@@ -171,6 +171,11 @@ export enum MessageKind {
      * Agent seeking clarification (CS < 0.7)
      */
     KindConsultation = "consultation",
+
+    /**
+     * Agent wrote a file to the sandbox
+     */
+    KindFileCreated = "file_created",
 };
 
 /**
