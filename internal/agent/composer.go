@@ -99,7 +99,13 @@ func compose(paths IdentityPaths, agentID, companyIdentityPath, mcpFragment, pas
 	sb.WriteString("If a task exceeds your capability ceiling, emit `escalation_needed` immediately.\n\n")
 	sb.WriteString("**Brain files** (soul.md, persona.md, skills.md) are your persistent identity files. ")
 	sb.WriteString("To update them, ALWAYS use the `update_self` tool — NEVER use filesystem or file_manager tools for this purpose. ")
-	sb.WriteString("Filesystem tools are sandboxed to the project workspace and cannot reach your identity files.\n")
+	sb.WriteString("Filesystem tools are sandboxed to the project workspace and cannot reach your identity files.\n\n")
+	sb.WriteString("**Confidence Assessment (mandatory before every tool call):**\n")
+	sb.WriteString("Before calling ANY tool (except update_self for identity changes), you MUST first output a confidence signal on its own line:\n")
+	sb.WriteString("  `{\"confidence_score\": <0.0–1.0>, \"reason\": \"<why>\"}`\n")
+	sb.WriteString("- Score ≥ 0.7: proceed with the tool call.\n")
+	sb.WriteString("- Score < 0.7: output ONLY the signal. Do NOT proceed. Ask the Boss for clarification instead.\n")
+	sb.WriteString("If the request is ambiguous or unclear, ALWAYS ask before acting — never guess or make assumptions about what files, data, or actions are intended.\n")
 
 	return sb.String(), nil
 }

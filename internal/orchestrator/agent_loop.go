@@ -403,24 +403,36 @@ func (e *EscalationNeededError) Error() string {
 // It explicitly prompts the agent to recognise identity instructions and act on
 // them with update_self before composing its reply.
 func dmTurnPrompt(message string) string {
-	return fmt.Sprintf(`You have a direct message from the Boss. Before composing your reply, reason through:
+	return fmt.Sprintf(`You have a direct message from the Boss. Before composing your reply, work through each step in order:
 
-1. What is the Boss communicating? (introduction / question / instruction / task)
-2. Does this affect your identity?
+1. **Understand**: What is the Boss communicating? (introduction / question / instruction / task)
+
+2. **Identity check**: Does this affect your identity?
    - New name → update persona.md via update_self
    - Personality / communication style → update persona.md via update_self
    - Values or principles → update soul.md via update_self
    - Skills → update skills.md via update_self
-   If yes, call update_self FIRST, then reply.
-3. Does this require any other tool calls?
-4. What tone is appropriate for your reply?
+   If yes, call update_self FIRST, then continue.
+
+3. **Tool call check**: Does this require any tool calls (other than update_self)?
+   - If YES: STOP. Before calling any tool, you MUST first assess your confidence.
+     Output this JSON on its own line: {"confidence_score": <0.0–1.0>, "reason": "<why>"}
+     - Score ≥ 0.7 → proceed with the tool call immediately after.
+     - Score < 0.7 → output ONLY the confidence signal. Do NOT call the tool. Explain what information you need to proceed.
+   - If NO: continue to step 4.
+
+4. **Ambiguity check**: Is the request clear enough to act on?
+   - If the request is ambiguous, vague, or could cause unintended consequences, DO NOT guess.
+     Ask the Boss one specific clarifying question instead.
+
+5. **Tone**: What tone is appropriate for your reply?
 
 Message from Boss:
 ---
 %s
 ---
 
-Respond now. If you updated a brain file first, briefly confirm it (e.g. "Done — I've saved Alfred as my name."), then continue naturally.`, strings.TrimSpace(message))
+Respond now. Work through each step before writing your reply.`, strings.TrimSpace(message))
 }
 // a Boss command into a list of sub-tasks.
 func decomposePrompt(bossCommand string) string {
@@ -433,9 +445,16 @@ func decomposePrompt(bossCommand string) string {
 Decide how to respond:
 
 **If this is a task or request that requires work** (e.g. "build X", "write Y", "research Z", "find out…"):
-1. Decompose it into sub-tasks as a JSON array on ONE line, then briefly explain your plan.
-   Format: [{"id":"t1","title":"short title","description":"detail","assignee":"lead|specialist"},...]
-   Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; dependencies first.
+1. First, assess whether the task is clear enough to act on.
+   - If it is ambiguous or could have unintended consequences, DO NOT guess or assume.
+     Ask the Boss one specific clarifying question.
+   - If it IS clear, decompose it into sub-tasks as a JSON array on ONE line, then briefly explain your plan.
+     Format: [{"id":"t1","title":"short title","description":"detail","assignee":"lead|specialist"},...]
+     Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; dependencies first.
+2. Before making ANY tool call, output a confidence signal on its own line:
+   {"confidence_score": <0.0–1.0>, "reason": "<why>"}
+   - Score ≥ 0.7 → proceed with the tool call.
+   - Score < 0.7 → output ONLY the confidence signal; do NOT proceed. Explain what's needed.
 
 **If this is conversational** (greetings, general discussion, questions, "hi team", etc.):
 1. Respond naturally and warmly as the team lead — no JSON, no task list.
