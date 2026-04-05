@@ -104,8 +104,20 @@ type WarRoomService struct {
 
 	// DM message queue — messages sent while Ollama is offline are held here
 	// and flushed automatically when Ollama comes back online.
-	pendingMu sync.Mutex
+	pendingMu  sync.Mutex
 	pendingDMs []pendingDM
+
+	// DM message batching — messages sent while a DM agent is busy are
+	// accumulated and combined into a single LLM request to reduce round-trips
+	// and give the model maximum context.
+	dmBatchMu      sync.Mutex
+	dmBatchPending map[string][]string // agentID -> queued messages
+	dmBatchRunning map[string]bool     // agentID -> goroutine active
+
+	// Channel message batching — same as DM but for war-room commands.
+	chBatchMu      sync.Mutex
+	chBatchPending []string
+	chBatchRunning bool
 }
 
 // pendingDM holds a DM message that could not be processed because Ollama
@@ -561,6 +573,9 @@ func (s *WarRoomService) GetMessages(ctx context.Context, conversationID string,
 // Returns immediately; responses arrive via kotui:message events.
 // Token chunks are streamed to the frontend via kotui:channel_stream so the
 // channel chat has the same live typing effect as DM conversations.
+//
+// Like SendDirectMessage, commands sent while a response is in-flight are
+// batched and delivered as a single combined request.
 func (s *WarRoomService) SendBossCommand(ctx context.Context, command string) error {
 	if s.orch == nil {
 		return fmt.Errorf("orchestrator not initialised — is Ollama running?")
@@ -569,18 +584,48 @@ func (s *WarRoomService) SendBossCommand(ctx context.Context, command string) er
 	convID := s.activeConvID
 	s.mu.RUnlock()
 
-	onChunk := func(chunk string) {
-		s.app.Event.Emit("kotui:channel_stream", map[string]any{
-			"conversation_id": convID,
-			"chunk":           chunk,
-		})
+	// Add to batch; launch processing goroutine only if none is running.
+	s.chBatchMu.Lock()
+	s.chBatchPending = append(s.chBatchPending, command)
+	alreadyRunning := s.chBatchRunning
+	if !alreadyRunning {
+		s.chBatchRunning = true
+	}
+	s.chBatchMu.Unlock()
+
+	if alreadyRunning {
+		return nil
 	}
 
-	s.app.Event.Emit("kotui:channel_busy", true)
 	go func() {
+		onChunk := func(chunk string) {
+			s.app.Event.Emit("kotui:channel_stream", map[string]any{
+				"conversation_id": convID,
+				"chunk":           chunk,
+			})
+		}
+
+		s.app.Event.Emit("kotui:channel_busy", true)
 		defer s.app.Event.Emit("kotui:channel_busy", false)
-		if err := s.orch.HandleBossCommand(context.Background(), command, onChunk); err != nil {
-			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+
+		for {
+			s.chBatchMu.Lock()
+			batch := s.chBatchPending
+			s.chBatchPending = nil
+			s.chBatchMu.Unlock()
+
+			combined := joinBatch(batch)
+			if err := s.orch.HandleBossCommand(context.Background(), combined, onChunk); err != nil {
+				s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+			}
+
+			s.chBatchMu.Lock()
+			if len(s.chBatchPending) == 0 {
+				s.chBatchRunning = false
+				s.chBatchMu.Unlock()
+				return
+			}
+			s.chBatchMu.Unlock()
 		}
 	}()
 	return nil
@@ -1092,6 +1137,11 @@ func (s *WarRoomService) GetOrCreateDirectConversation(ctx context.Context, agen
 
 // SendDirectMessage sends a message directly to a specific agent and routes the
 // response back to the DM conversation window — bypassing the Lead/Worker pipeline.
+//
+// If a response is already in-flight for this agent, the new message is batched
+// with any other pending messages and delivered as a single combined request when
+// the current inference completes. This reduces LLM round-trips and gives the
+// model the full conversation context.
 func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message string) error {
 	if s.orch == nil {
 		return fmt.Errorf("orchestrator not initialised")
@@ -1105,7 +1155,8 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 		return fmt.Errorf("no active project")
 	}
 
-	// Persist and emit the user's message to the DM conversation immediately.
+	// Persist and emit the user's message to the DM conversation immediately
+	// so it appears in the chat without waiting for the agent to respond.
 	userMsg := models.Message{
 		ProjectID:      p.ID,
 		ConversationID: convID,
@@ -1156,23 +1207,77 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 		return nil
 	}
 
-	// Call the agent directly in a goroutine — response is dispatched back to
-	// convID (the DM conversation) by HandleDirectMessage, not to the war-room.
-	go func() {
-		// Notify the frontend that the DM agent is responding.
-		s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": convID, "busy": true})
-		defer s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": convID, "busy": false})
+	// Add this message to the per-agent batch and, if no goroutine is running
+	// for this agent, launch one. If one is already running it will pick up the
+	// new message after completing its current inference call.
+	s.dmBatchMu.Lock()
+	if s.dmBatchPending == nil {
+		s.dmBatchPending = make(map[string][]string)
+	}
+	if s.dmBatchRunning == nil {
+		s.dmBatchRunning = make(map[string]bool)
+	}
+	s.dmBatchPending[agentID] = append(s.dmBatchPending[agentID], message)
+	alreadyRunning := s.dmBatchRunning[agentID]
+	if !alreadyRunning {
+		s.dmBatchRunning[agentID] = true
+	}
+	s.dmBatchMu.Unlock()
 
-		// onChunk forwards each streamed token to the frontend for live rendering.
+	if alreadyRunning {
+		// A goroutine is active; it will drain the new message when done.
+		return nil
+	}
+
+	// Launch the batch-processing goroutine for this agent.
+	go func() {
 		onChunk := func(chunk string) {
 			s.app.Event.Emit("kotui:dm_stream", map[string]any{
 				"conversation_id": convID,
 				"chunk":           chunk,
 			})
 		}
-		if err := s.orch.HandleDirectMessage(context.Background(), agentID, message, convID, onChunk); err != nil {
-			s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+
+		s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": convID, "busy": true})
+		defer s.app.Event.Emit("kotui:dm_busy", map[string]any{"conversation_id": convID, "busy": false})
+
+		for {
+			// Drain all pending messages atomically and combine them.
+			s.dmBatchMu.Lock()
+			batch := s.dmBatchPending[agentID]
+			s.dmBatchPending[agentID] = nil
+			s.dmBatchMu.Unlock()
+
+			combined := joinBatch(batch)
+			if err := s.orch.HandleDirectMessage(context.Background(), agentID, combined, convID, onChunk); err != nil {
+				s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+			}
+
+			// After inference completes, check atomically if more messages arrived.
+			// If yes, loop; if no, mark the goroutine as done and exit.
+			s.dmBatchMu.Lock()
+			if len(s.dmBatchPending[agentID]) == 0 {
+				s.dmBatchRunning[agentID] = false
+				s.dmBatchMu.Unlock()
+				return
+			}
+			s.dmBatchMu.Unlock()
 		}
 	}()
 	return nil
+}
+
+// joinBatch combines a slice of messages into a single string. When there is
+// more than one message, each is labelled to give the LLM clear context about
+// the order in which the Boss sent them.
+func joinBatch(msgs []string) string {
+	if len(msgs) == 1 {
+		return msgs[0]
+	}
+	var sb strings.Builder
+	sb.WriteString("The Boss sent the following messages while you were responding to the previous one. Please address all of them:\n\n")
+	for i, m := range msgs {
+		fmt.Fprintf(&sb, "Message %d:\n%s\n\n", i+1, m)
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }

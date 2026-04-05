@@ -32,6 +32,10 @@ type RunningAgent struct {
 	// tool results, errors). Callers set this before calling Turn/TurnStream to
 	// route log entries to the appropriate Dispatcher channel.
 	OnRaw func(kind models.MessageKind, content string)
+
+	// LastThinking holds the thinking content from the most recent Turn/TurnStream
+	// call. Set after extractThinkBlocks; empty when the model produced no thinking.
+	LastThinking string
 }
 
 // rawLog calls OnRaw if set. Safe to call when OnRaw is nil.
@@ -107,6 +111,7 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 
 		// Split thinking from visible response; log thinking to raw activity.
 		thinkContent, response := extractThinkBlocks(rawResponse)
+		ra.LastThinking = thinkContent
 		if thinkContent != "" {
 			ra.rawLog(models.KindSystemEvent, "💭 thinking:\n"+thinkContent)
 		}
@@ -250,6 +255,7 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 
 		// Split thinking from visible response; log thinking to raw activity.
 		thinkContent, response := extractThinkBlocks(rawResponse)
+		ra.LastThinking = thinkContent
 		if thinkContent != "" {
 			ra.rawLog(models.KindSystemEvent, "💭 thinking:\n"+thinkContent)
 		}

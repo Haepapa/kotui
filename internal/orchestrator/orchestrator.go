@@ -13,6 +13,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -260,6 +261,7 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 			Tier:           models.TierSummary,
 			AgentID:        "lead",
 			Content:        decomposed,
+			Metadata:       thinkingMeta(o.lead.LastThinking),
 		})
 		return nil
 	}
@@ -328,6 +330,7 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 			Tier:           models.TierSummary,
 			AgentID:        "lead",
 			Content:        summary,
+			Metadata:       thinkingMeta(o.lead.LastThinking),
 		})
 	}
 
@@ -425,6 +428,9 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 		}
 
 		// Dispatch the agent reply to the DM conversation.
+		// Include thinking content in metadata so the frontend can render it
+		// as a collapsed block in the persisted chat history.
+		meta := thinkingMeta(ra.LastThinking)
 		o.disp.Dispatch(models.Message{
 			ProjectID:      o.projectID,
 			ConversationID: convID,
@@ -432,6 +438,7 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 			Kind:           models.KindAgentMessage,
 			Tier:           models.TierSummary,
 			Content:        response,
+			Metadata:       meta,
 		})
 		return nil
 	})
@@ -484,6 +491,19 @@ func (o *Orchestrator) MCPFragmentForAgent(agentID string) string {
 		return o.mcpEng.SystemPromptFragment(models.ClearanceLead)
 	}
 	return o.mcpEng.SystemPromptFragment(models.ClearanceSpecialist)
+}
+
+// thinkingMeta builds a JSON metadata string embedding thinking content.
+// Returns "{}" when thinking is empty so the Message always has valid JSON.
+func thinkingMeta(thinking string) string {
+	if thinking == "" {
+		return "{}"
+	}
+	b, err := json.Marshal(map[string]string{"thinking": thinking})
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 // CultureBroadcast forces a full context reset on all active agents.

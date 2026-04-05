@@ -242,6 +242,9 @@ export function SaveConfig(uiCfg: $models.UIConfig): $CancellablePromise<void> {
  * Returns immediately; responses arrive via kotui:message events.
  * Token chunks are streamed to the frontend via kotui:channel_stream so the
  * channel chat has the same live typing effect as DM conversations.
+ * 
+ * Like SendDirectMessage, commands sent while a response is in-flight are
+ * batched and delivered as a single combined request.
  */
 export function SendBossCommand(command: string): $CancellablePromise<void> {
     return $Call.ByID(3294220229, command);
@@ -250,6 +253,11 @@ export function SendBossCommand(command: string): $CancellablePromise<void> {
 /**
  * SendDirectMessage sends a message directly to a specific agent and routes the
  * response back to the DM conversation window — bypassing the Lead/Worker pipeline.
+ * 
+ * If a response is already in-flight for this agent, the new message is batched
+ * with any other pending messages and delivered as a single combined request when
+ * the current inference completes. This reduces LLM round-trips and gives the
+ * model the full conversation context.
  */
 export function SendDirectMessage(agentID: string, message: string): $CancellablePromise<void> {
     return $Call.ByID(3506599419, agentID, message);

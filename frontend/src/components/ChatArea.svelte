@@ -50,12 +50,24 @@
     return { thinking: '', response: content };
   }
 
+  // Extract thinking from a stored message's metadata JSON field.
+  // Returns an empty string when no thinking was recorded.
+  function metaThinking(metadata: string | undefined): string {
+    if (!metadata || metadata === '{}') return '';
+    try {
+      const m = JSON.parse(metadata);
+      return typeof m.thinking === 'string' ? m.thinking : '';
+    } catch {
+      return '';
+    }
+  }
+
   // Derived: split the live stream into thinking vs response parts.
   const streamParsed = $derived(parseThink(streamContent));
 
   async function send() {
     const cmd = input.trim();
-    if (!cmd || isBusy) return;
+    if (!cmd) return;
     if (!wr.activeProjectID) {
       sendError = 'Select or create a channel first.';
       return;
@@ -214,7 +226,14 @@
               <span class="bubble-time">{formatTime(msg.created_at)}</span>
             </div>
             <div class="bubble bubble-agent" class:tool={msg.kind === 'tool_call' || msg.kind === 'tool_result'}>
-              {#if parseThink(msg.content).thinking}
+              {#if metaThinking(msg.metadata)}
+                {@const think = metaThinking(msg.metadata)}
+                <details class="think-block">
+                  <summary class="think-summary">thinking…</summary>
+                  <div class="think-body">{think}</div>
+                </details>
+                <p class="bubble-text">{#each renderContent(msg.content) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else}{part.value}{/if}{/each}</p>
+              {:else if parseThink(msg.content).thinking}
                 {@const parsed = parseThink(msg.content)}
                 <details class="think-block">
                   <summary class="think-summary">thinking…</summary>
@@ -297,7 +316,7 @@
       <textarea
         class="composer-input"
         placeholder={wr.activeProjectID ? (isDM ? `Message ${dmAgentID || 'agent'}…` : 'Message the Lead…') : 'Select a channel first…'}
-        disabled={isBusy || !wr.activeProjectID}
+        disabled={!wr.activeProjectID}
         bind:value={input}
         bind:this={inputEl}
         onkeydown={onKeydown}
@@ -306,7 +325,7 @@
       ></textarea>
       <button
         class="send-btn"
-        disabled={isBusy || !input.trim()}
+        disabled={!input.trim()}
         onclick={send}
         title="Send (Enter)"
         aria-label="Send"
