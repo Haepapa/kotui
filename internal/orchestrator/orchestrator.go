@@ -237,6 +237,7 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 		}
 	}
 	o.lead.OnRaw = o.channelRawFn("lead")
+	o.vram.NotifyLeadRunning()
 	decomposed, err := o.lead.TurnStream(ctx, augmented, onChunk)
 	o.lead.OnRaw = nil
 	if err != nil {
@@ -268,6 +269,16 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	})
 
 	tasks := parseTaskList(decomposed)
+
+	// Speculative pre-loading: in VRAMDual mode, begin warming the worker model
+	// in the background while we persist tasks and prepare execution. This
+	// eliminates cold-start latency for the first specialist task.
+	for _, task := range tasks {
+		if task.Assignee == "specialist" {
+			go o.vram.PreWarm(context.Background(), o.cfg.WorkerModel)
+			break
+		}
+	}
 	if len(tasks) == 0 {
 		// Lead may have just answered directly (simple tasks).
 		o.disp.DispatchSummary(models.Message{
@@ -335,6 +346,7 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	// Step 4: Lead produces final summary milestone.
 	o.leadMu.Lock()
 	o.lead.OnRaw = o.channelRawFn("lead")
+	o.vram.NotifyLeadRunning()
 	summary, sumErr := o.lead.TurnStream(ctx, "All sub-tasks are complete. Provide a brief summary of what was accomplished for the Boss.", onChunk)
 	o.lead.OnRaw = nil
 	o.leadMu.Unlock()

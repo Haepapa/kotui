@@ -247,7 +247,7 @@ func TestVRAMCoordinator_DualModeDoesNotPark(t *testing.T) {
 	inf := &mockInferrer{response: "ok"}
 	vc := orchestrator.NewVRAMCoordinatorForTest(models.VRAMDual, inf, "test-model")
 
-	if err := vc.AcquireWorkerSlot(context.Background()); err != nil {
+	if err := vc.AcquireWorkerSlot(context.Background(), "worker-model"); err != nil {
 		t.Fatalf("AcquireWorkerSlot: %v", err)
 	}
 	defer vc.ReleaseWorkerSlot(context.Background())
@@ -264,7 +264,7 @@ func TestVRAMCoordinator_SwapModeParksLead(t *testing.T) {
 	inf := &mockInferrer{response: "ok"}
 	vc := orchestrator.NewVRAMCoordinatorForTest(models.VRAMSwap, inf, "test-model")
 
-	if err := vc.AcquireWorkerSlot(context.Background()); err != nil {
+	if err := vc.AcquireWorkerSlot(context.Background(), "worker-model"); err != nil {
 		t.Fatalf("AcquireWorkerSlot: %v", err)
 	}
 	defer vc.ReleaseWorkerSlot(context.Background())
@@ -278,16 +278,49 @@ func TestVRAMCoordinator_ReleaseRestoresSlot(t *testing.T) {
 	inf := &mockInferrer{response: "ok"}
 	vc := orchestrator.NewVRAMCoordinatorForTest(models.VRAMDual, inf, "test-model")
 
-	vc.AcquireWorkerSlot(context.Background())
+	vc.AcquireWorkerSlot(context.Background(), "worker-model")
 	vc.ReleaseWorkerSlot(context.Background())
 
 	// Should be acquirable again immediately.
 	ctx, cancel := context.WithTimeout(context.Background(), 100e6) // 100ms
 	defer cancel()
-	if err := vc.AcquireWorkerSlot(ctx); err != nil {
+	if err := vc.AcquireWorkerSlot(ctx, "worker-model"); err != nil {
 		t.Errorf("slot should be available after release: %v", err)
 	}
 	vc.ReleaseWorkerSlot(context.Background())
+}
+
+func TestVRAMCoordinator_LogicalSwapSkipsPark(t *testing.T) {
+	inf := &mockInferrer{response: "ok"}
+	vc := orchestrator.NewVRAMCoordinatorForTest(models.VRAMSwap, inf, "lead-model")
+
+	// First acquisition: full park+cooling cycle.
+	if err := vc.AcquireWorkerSlot(context.Background(), "worker-model"); err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	parkCallsAfterFirst := inf.calls.Load()
+	vc.ReleaseWorkerSlot(context.Background())
+
+	// Second acquisition with the same model: logical swap — no extra park call.
+	if err := vc.AcquireWorkerSlot(context.Background(), "worker-model"); err != nil {
+		t.Fatalf("second acquire: %v", err)
+	}
+	vc.ReleaseWorkerSlot(context.Background())
+
+	if inf.calls.Load() != parkCallsAfterFirst {
+		t.Errorf("logical swap should not add park calls: before=%d after=%d",
+			parkCallsAfterFirst, inf.calls.Load())
+	}
+
+	// After NotifyLeadRunning, the optimisation must be invalidated.
+	vc.NotifyLeadRunning()
+	if err := vc.AcquireWorkerSlot(context.Background(), "worker-model"); err != nil {
+		t.Fatalf("third acquire: %v", err)
+	}
+	vc.ReleaseWorkerSlot(context.Background())
+	if inf.calls.Load() <= parkCallsAfterFirst {
+		t.Errorf("should have parked after NotifyLeadRunning: calls=%d", inf.calls.Load())
+	}
 }
 
 // --- Hiring workflow -------------------------------------------------------

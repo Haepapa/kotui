@@ -99,8 +99,9 @@ func runWorkerTask(
 	mem *memory.Store,
 	log *slog.Logger,
 ) (WorkerResult, error) {
-	// Acquire VRAM slot — parks Lead in swap mode.
-	if err := vram.AcquireWorkerSlot(ctx); err != nil {
+	// Acquire VRAM slot — parks Lead in swap mode, skips park for logical swap
+	// (same model as the previous worker, still hot in VRAM).
+	if err := vram.AcquireWorkerSlot(ctx, cfg.WorkerModel); err != nil {
 		return WorkerResult{TaskID: job.TaskID, IsError: true},
 			fmt.Errorf("worker slot: %w", err)
 	}
