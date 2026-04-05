@@ -71,6 +71,8 @@ export function GetActiveConversation(): $CancellablePromise<string> {
 
 /**
  * GetAgentBrainFiles reads the three editable brain files for the given agent.
+ * If the brain files don't exist yet (e.g. first run before first chat), they
+ * are initialised with defaults so the panel always has content to show.
  */
 export function GetAgentBrainFiles(agentID: string): $CancellablePromise<$models.BrainFiles> {
     return $Call.ByID(3948791757, agentID).then(($result: any) => {

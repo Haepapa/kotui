@@ -45,7 +45,8 @@ func fileManagerTool(box *mcp.Sandbox) mcp.ToolDef {
 		Clearance: models.ClearanceLead,
 		Description: "Read-only project structure overview. " +
 			"Operations: tree (recursive directory listing), stat (file metadata), find (glob search). " +
-			"All paths are scoped to the project workspace.",
+			"All paths are scoped to the project workspace — cannot access brain files or home directory. " +
+			"To update your own brain files (soul, persona, skills) use the update_self tool instead.",
 		Schema:  fileManagerSchema,
 		Handler: fileManagerHandler(box),
 	}

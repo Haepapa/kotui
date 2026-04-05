@@ -128,7 +128,33 @@ func parseToolCallFromBlock(text string) *models.ToolCall {
 	}
 }
 
-// parseEscalation scans text for the escalation_needed signal defined in
+// extractThinkBlocks separates <think>...</think> content from the main response.
+// Handles multiple blocks and unclosed blocks (still streaming).
+// Returns (thinkContent, cleanedResponse).
+func extractThinkBlocks(text string) (think, response string) {
+	const openTag = "<think>"
+	const closeTag = "</think>"
+	var thinkBuf, resBuf strings.Builder
+	rest := text
+	for {
+		start := strings.Index(rest, openTag)
+		if start < 0 {
+			resBuf.WriteString(rest)
+			break
+		}
+		resBuf.WriteString(rest[:start])
+		rest = rest[start+len(openTag):]
+		end := strings.Index(rest, closeTag)
+		if end < 0 {
+			// Unclosed block — treat remainder as thinking (still streaming)
+			thinkBuf.WriteString(rest)
+			break
+		}
+		thinkBuf.WriteString(rest[:end])
+		rest = rest[end+len(closeTag):]
+	}
+	return strings.TrimSpace(thinkBuf.String()), strings.TrimSpace(resBuf.String())
+}
 // handbook.md. Returns nil if the signal is not present.
 func parseEscalation(text string) *EscalationSignal {
 	for _, line := range strings.Split(text, "\n") {

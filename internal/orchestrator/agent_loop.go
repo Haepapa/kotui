@@ -41,6 +41,9 @@ func (ra *RunningAgent) rawLog(kind models.MessageKind, content string) {
 	}
 }
 
+// boolPtr returns a pointer to the given bool — used for optional JSON fields.
+func boolPtr(b bool) *bool { return &b }
+
 // newRunningAgent creates a RunningAgent from a spawned agent.Agent.
 func newRunningAgent(
 	agentID, name, model string,
@@ -86,6 +89,7 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 			Model:     ra.Model,
 			Messages:  msgs,
 			KeepAlive: ra.KeepAlive,
+			Think:     boolPtr(true),
 		})
 		elapsed := time.Since(start)
 		if err != nil {
@@ -94,7 +98,18 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 		}
 		ra.rawLog(models.KindSystemEvent, fmt.Sprintf("← /api/chat done  %.2fs  agent=%s", elapsed.Seconds(), ra.AgentName))
 
-		response := result.Content
+		// Extract native thinking content (Ollama ≥0.7) and synthesise it as
+		// <think> blocks so the same extraction logic handles all cases uniformly.
+		rawResponse := result.Content
+		if result.Thinking != "" {
+			rawResponse = "<think>" + result.Thinking + "</think>" + result.Content
+		}
+
+		// Split thinking from visible response; log thinking to raw activity.
+		thinkContent, response := extractThinkBlocks(rawResponse)
+		if thinkContent != "" {
+			ra.rawLog(models.KindSystemEvent, "💭 thinking:\n"+thinkContent)
+		}
 
 		// Check for escalation signal first.
 		if sig := parseEscalation(response); sig != nil {
@@ -172,6 +187,7 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 			Model:     ra.Model,
 			Messages:  msgs,
 			KeepAlive: ra.KeepAlive,
+			Think:     boolPtr(true),
 		})
 		if err != nil {
 			elapsed := time.Since(start)
@@ -179,10 +195,35 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 			return "", fmt.Errorf("agent %s: inference: %w", ra.AgentName, err)
 		}
 
+		// Track thinking and content separately during streaming.
+		// Thinking tokens are synthesised into <think>...</think> so the frontend
+		// parseThink() renders them as a collapsible "thinking…" block, and
+		// extractThinkBlocks() can strip them cleanly before storage.
 		var sb strings.Builder
+		thinkingStarted := false
+		thinkingEnded := false
 		for chunk := range ch {
-			// Write content first — the final Done chunk may also carry content.
+			if chunk.Thinking != "" {
+				if !thinkingStarted {
+					sb.WriteString("<think>")
+					if onChunk != nil {
+						onChunk("<think>")
+					}
+					thinkingStarted = true
+				}
+				sb.WriteString(chunk.Thinking)
+				if onChunk != nil {
+					onChunk(chunk.Thinking)
+				}
+			}
 			if chunk.Content != "" {
+				if thinkingStarted && !thinkingEnded {
+					sb.WriteString("</think>")
+					if onChunk != nil {
+						onChunk("</think>")
+					}
+					thinkingEnded = true
+				}
 				sb.WriteString(chunk.Content)
 				if onChunk != nil {
 					onChunk(chunk.Content)
@@ -192,13 +233,26 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 				break
 			}
 		}
+		// Close any unclosed think block (rare — model stopped mid-think).
+		if thinkingStarted && !thinkingEnded {
+			sb.WriteString("</think>")
+			if onChunk != nil {
+				onChunk("</think>")
+			}
+		}
 		elapsed := time.Since(start)
-		response := sb.String()
-		if response == "" {
+		rawResponse := sb.String()
+		if rawResponse == "" {
 			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("✗ empty response after %.2fs  agent=%s", elapsed.Seconds(), ra.AgentName))
 			return "", fmt.Errorf("agent %s: empty response from model", ra.AgentName)
 		}
 		ra.rawLog(models.KindSystemEvent, fmt.Sprintf("← /api/chat done  %.2fs  agent=%s", elapsed.Seconds(), ra.AgentName))
+
+		// Split thinking from visible response; log thinking to raw activity.
+		thinkContent, response := extractThinkBlocks(rawResponse)
+		if thinkContent != "" {
+			ra.rawLog(models.KindSystemEvent, "💭 thinking:\n"+thinkContent)
+		}
 
 		if sig := parseEscalation(response); sig != nil {
 			return "", &EscalationNeededError{
@@ -313,7 +367,30 @@ func (e *EscalationNeededError) Error() string {
 		e.AgentName, e.AgentID, e.Reason, e.CapabilityRequired)
 }
 
-// decomposePrompt returns the instruction used to ask the Lead to decompose
+// dmTurnPrompt wraps a DM message with a structured pre-flight that encourages
+// the agent to reason before responding — the DM equivalent of decomposePrompt.
+// It explicitly prompts the agent to recognise identity instructions and act on
+// them with update_self before composing its reply.
+func dmTurnPrompt(message string) string {
+	return fmt.Sprintf(`You have a direct message from the Boss. Before composing your reply, reason through:
+
+1. What is the Boss communicating? (introduction / question / instruction / task)
+2. Does this affect your identity?
+   - New name → update persona.md via update_self
+   - Personality / communication style → update persona.md via update_self
+   - Values or principles → update soul.md via update_self
+   - Skills → update skills.md via update_self
+   If yes, call update_self FIRST, then reply.
+3. Does this require any other tool calls?
+4. What tone is appropriate for your reply?
+
+Message from Boss:
+---
+%s
+---
+
+Respond now. If you updated a brain file first, briefly confirm it (e.g. "Done — I've saved Alfred as my name."), then continue naturally.`, strings.TrimSpace(message))
+}
 // a Boss command into a list of sub-tasks.
 func decomposePrompt(bossCommand string) string {
 	return fmt.Sprintf(`You are the Lead agent in a team channel. A message has arrived:

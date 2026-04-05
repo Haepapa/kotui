@@ -68,6 +68,13 @@
     if (wr.activeView === 'dm') return `@ ${agentName(wr.activeDMAgentID)}`;
     return null;
   });
+  let toastCopied = $state(false);
+  function copyToast() {
+    navigator.clipboard.writeText(wr.errorBanner).then(() => {
+      toastCopied = true;
+      setTimeout(() => (toastCopied = false), 2000);
+    });
+  }
 </script>
 
 <div class="shell">
@@ -147,7 +154,14 @@
       {#if wr.errorBanner}
         <div class="error-toast" style="--wails-draggable:no-drag">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span>{wr.errorBanner}</span>
+          <span style="flex:1;user-select:text;-webkit-user-select:text;cursor:text">{wr.errorBanner}</span>
+          <button class="toast-copy-btn" onclick={copyToast} title="Copy error">
+            {#if toastCopied}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            {:else}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"/></svg>
+            {/if}
+          </button>
         </div>
       {/if}
       {#if wr.activeView === 'settings'}
@@ -328,6 +342,22 @@
     from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  .toast-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: #fca5a5;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: color 0.12s, background 0.12s;
+  }
+  .toast-copy-btn:hover { color: #fff; background: rgba(252,165,165,0.15); }
 
   .body {
     flex: 1;

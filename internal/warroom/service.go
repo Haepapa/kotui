@@ -367,6 +367,14 @@ func (s *WarRoomService) InitFirstRun(ctx context.Context) (FirstRunResult, erro
 		return FirstRunResult{}, fmt.Errorf("first run: create project: %w", err)
 	}
 
+	// Ensure the Lead agent's brain files exist so the Brain Files panel works
+	// immediately, even before the user sends their first message.
+	leadPaths := agent.AgentPaths(s.cfg.App.DataDir, "lead")
+	if err := agent.EnsureDefaultFiles(leadPaths, "lead", "Lead", models.RoleLead, s.cfg.Models.Lead); err != nil {
+		// Non-fatal: agent.Spawn will retry when the first message arrives.
+		_ = err
+	}
+
 	// Create the Lead DM conversation.
 	convID, err := s.db.CreateConversation(ctx, proj.ID, "dm:lead")
 	if err != nil {
@@ -907,8 +915,24 @@ type BrainFiles struct {
 }
 
 // GetAgentBrainFiles reads the three editable brain files for the given agent.
+// If the brain files don't exist yet (e.g. first run before first chat), they
+// are initialised with defaults so the panel always has content to show.
 func (s *WarRoomService) GetAgentBrainFiles(ctx context.Context, agentID string) (BrainFiles, error) {
 	paths := agent.AgentPaths(s.cfg.App.DataDir, agentID)
+
+	// Determine role so defaults are appropriate.
+	role := models.RoleLead // only lead agents support brain panel currently
+	model := s.cfg.Models.Lead
+	if model == "" {
+		model = "(model not yet configured)"
+	}
+	name := agent.ReadAgentName(s.cfg.App.DataDir, agentID)
+	if name == agentID {
+		name = "Lead" // friendlier default for display
+	}
+	if err := agent.EnsureDefaultFiles(paths, agentID, name, role, model); err != nil {
+		return BrainFiles{}, fmt.Errorf("ensure brain files: %w", err)
+	}
 
 	soul, err := os.ReadFile(paths.SoulPath)
 	if err != nil {

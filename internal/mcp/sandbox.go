@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -40,6 +41,19 @@ func (s *Sandbox) Disabled() bool { return s.root == "" }
 func (s *Sandbox) Resolve(path string) (string, error) {
 	if s.root == "" {
 		return filepath.Clean(path), nil
+	}
+
+	// Expand ~ to the real home directory so that the sandbox boundary check
+	// produces a clear "path escapes sandbox" error instead of a confusing
+	// "no such file or directory" for a literal `~` directory.
+	if strings.HasPrefix(path, "~/") || path == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			if path == "~" {
+				path = home
+			} else {
+				path = home + path[1:]
+			}
+		}
 	}
 
 	// Make relative paths relative to the sandbox root.

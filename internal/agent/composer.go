@@ -82,10 +82,24 @@ func compose(paths IdentityPaths, agentID, companyIdentityPath, mcpFragment, pas
 	}
 
 	// Closing reminder
-	sb.WriteString("## Reminder\n\n")
+	sb.WriteString("## Identity Management\n\n")
+	sb.WriteString("When the Boss provides identity information in a direct message — a name for you, a personality, values, or skills — you **MUST**:\n\n")
+	sb.WriteString("1. Call `update_self` **immediately** to persist the change to the relevant brain file(s).\n")
+	sb.WriteString("   - Name or personality → `persona` file\n")
+	sb.WriteString("   - Values or principles → `soul` file\n")
+	sb.WriteString("   - Skills or capabilities → `skills` file\n")
+	sb.WriteString("2. You may call `update_self` multiple times in a single response if multiple files need updating.\n")
+	sb.WriteString("3. After the tool call succeeds, acknowledge briefly (e.g. \"Done — I've saved Alfred as my name.\").\n")
+	sb.WriteString("4. **Never** just say \"I'll call myself X\" without actually calling `update_self`. Always persist changes immediately.\n\n")
+	sb.WriteString("---\n\n")
+
+	sb.WriteString("## General Reminder\n\n")
 	sb.WriteString("You are operating within the Kotui Virtual Company. ")
 	sb.WriteString("Follow the handbook above at all times. ")
-	sb.WriteString("If a task exceeds your capability ceiling, emit `escalation_needed` immediately.\n")
+	sb.WriteString("If a task exceeds your capability ceiling, emit `escalation_needed` immediately.\n\n")
+	sb.WriteString("**Brain files** (soul.md, persona.md, skills.md) are your persistent identity files. ")
+	sb.WriteString("To update them, ALWAYS use the `update_self` tool — NEVER use filesystem or file_manager tools for this purpose. ")
+	sb.WriteString("Filesystem tools are sandboxed to the project workspace and cannot reach your identity files.\n")
 
 	return sb.String(), nil
 }

@@ -214,7 +214,16 @@
               <span class="bubble-time">{formatTime(msg.created_at)}</span>
             </div>
             <div class="bubble bubble-agent" class:tool={msg.kind === 'tool_call' || msg.kind === 'tool_result'}>
-              <p class="bubble-text">{#each renderContent(msg.content) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else}{part.value}{/if}{/each}</p>
+              {#if parseThink(msg.content).thinking}
+                {@const parsed = parseThink(msg.content)}
+                <details class="think-block">
+                  <summary class="think-summary">thinking…</summary>
+                  <div class="think-body">{parsed.thinking}</div>
+                </details>
+                <p class="bubble-text">{#each renderContent(parsed.response) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else}{part.value}{/if}{/each}</p>
+              {:else}
+                <p class="bubble-text">{#each renderContent(msg.content) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else}{part.value}{/if}{/each}</p>
+              {/if}
             </div>
           </div>
         </div>

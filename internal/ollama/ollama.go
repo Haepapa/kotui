@@ -139,6 +139,7 @@ func (c *Client) chatOnce(ctx context.Context, req ChatRequest) (*ChatResult, er
 
 	var (
 		sb        strings.Builder
+		thinkBuf  strings.Builder
 		lastChunk ChatResponseChunk
 	)
 	scanner := bufio.NewScanner(resp.Body)
@@ -150,6 +151,9 @@ func (c *Client) chatOnce(ctx context.Context, req ChatRequest) (*ChatResult, er
 		var chunk ChatResponseChunk
 		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
 			return nil, fmt.Errorf("ollama: parse stream chunk: %w", err)
+		}
+		if chunk.Message.Thinking != "" {
+			thinkBuf.WriteString(chunk.Message.Thinking)
 		}
 		sb.WriteString(chunk.Message.Content)
 		if chunk.Done {
@@ -163,6 +167,7 @@ func (c *Client) chatOnce(ctx context.Context, req ChatRequest) (*ChatResult, er
 
 	return &ChatResult{
 		Content:       sb.String(),
+		Thinking:      thinkBuf.String(),
 		Model:         lastChunk.Model,
 		TotalDuration: time.Duration(lastChunk.TotalDuration),
 		EvalCount:     lastChunk.EvalCount,
@@ -202,7 +207,7 @@ func (c *Client) streamInto(ctx context.Context, req ChatRequest, ch chan<- Stre
 		if err := json.Unmarshal([]byte(line), &chunk); err != nil {
 			return err
 		}
-		ch <- StreamChunk{Content: chunk.Message.Content, Done: chunk.Done}
+		ch <- StreamChunk{Content: chunk.Message.Content, Thinking: chunk.Message.Thinking, Done: chunk.Done}
 		if chunk.Done {
 			return nil
 		}

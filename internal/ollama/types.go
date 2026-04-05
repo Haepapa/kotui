@@ -44,8 +44,9 @@ func (k *KeepAlive) MarshalJSON() ([]byte, error) {
 
 // ChatMessage is a single turn in a conversation.
 type ChatMessage struct {
-	Role    string `json:"role"`    // "system" | "user" | "assistant" | "tool"
-	Content string `json:"content"`
+	Role     string `json:"role"`              // "system" | "user" | "assistant" | "tool"
+	Content  string `json:"content"`
+	Thinking string `json:"thinking,omitempty"` // populated by Ollama for think-capable models
 }
 
 // ChatRequest is the payload sent to POST /api/chat.
@@ -53,6 +54,7 @@ type ChatRequest struct {
 	Model     string        `json:"model"`
 	Messages  []ChatMessage `json:"messages"`
 	Stream    bool          `json:"stream"`
+	Think     *bool         `json:"think,omitempty"` // enables native thinking for supported models (Ollama ≥0.7)
 	KeepAlive *KeepAlive    `json:"keep_alive,omitempty"`
 	Options   *ModelOptions `json:"options,omitempty"`
 }
@@ -80,13 +82,15 @@ type ChatResponseChunk struct {
 
 // StreamChunk is delivered on the channel returned by ChatStream.
 type StreamChunk struct {
-	Content string
-	Done    bool
+	Content  string
+	Thinking string // native thinking content from think-capable models (Ollama ≥0.7)
+	Done     bool
 }
 
 // ChatResult is the fully-accumulated result of a single chat turn.
 type ChatResult struct {
 	Content       string
+	Thinking      string // accumulated thinking content, if model supports it
 	Model         string
 	TotalDuration time.Duration
 	EvalCount     int

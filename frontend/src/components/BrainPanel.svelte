@@ -13,8 +13,10 @@
   let persona = $state('');
   let skills  = $state('');
   let loadError = $state('');
+  let loadErrorCopied = $state(false);
   let saveStatus = $state<Record<TabKey, SaveStatus>>({ soul: 'idle', persona: 'idle', skills: 'idle' });
   let saveError  = $state<Record<TabKey, string>>({ soul: '', persona: '', skills: '' });
+  let saveErrorCopied = $state<Record<TabKey, boolean>>({ soul: false, persona: false, skills: false });
 
   const tabLabels: Record<TabKey, string> = {
     soul:    '✦ Soul',
@@ -38,6 +40,18 @@
     if (activeTab === 'soul')         soul    = val;
     else if (activeTab === 'persona') persona = val;
     else                              skills  = val;
+  }
+
+  function copyError(text: string, which: 'load' | TabKey) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (which === 'load') {
+        loadErrorCopied = true;
+        setTimeout(() => (loadErrorCopied = false), 2000);
+      } else {
+        saveErrorCopied[which as TabKey] = true;
+        setTimeout(() => (saveErrorCopied[which as TabKey] = false), 2000);
+      }
+    });
   }
 
   onMount(async () => {
@@ -75,7 +89,16 @@
   </div>
 
   {#if loadError}
-    <div class="load-error">⚠ Could not load brain files: {loadError}</div>
+    <div class="load-error">
+      <span>⚠ Could not load brain files: {loadError}</span>
+      <button class="err-copy-btn" onclick={() => copyError(loadError, 'load')} title="Copy error">
+        {#if loadErrorCopied}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        {:else}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        {/if}
+      </button>
+    </div>
   {:else}
     <div class="tabs">
       {#each (Object.keys(tabLabels) as TabKey[]) as tab}
@@ -103,7 +126,16 @@
       ></textarea>
       <div class="tab-footer">
         {#if saveStatus[activeTab] === 'error'}
-          <span class="status-error">{saveError[activeTab]}</span>
+          <span class="status-error">
+            {saveError[activeTab]}
+            <button class="err-copy-btn" onclick={() => copyError(saveError[activeTab], activeTab)} title="Copy error">
+              {#if saveErrorCopied[activeTab]}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              {:else}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              {/if}
+            </button>
+          </span>
         {:else if saveStatus[activeTab] === 'saved'}
           <span class="status-saved">✓ Saved — agent context refreshed</span>
         {/if}
@@ -161,10 +193,14 @@
   }
 
   .load-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
     padding: 1.25rem;
     color: #f87171;
     font-size: 0.9rem;
   }
+  .load-error span { flex: 1; user-select: text; -webkit-user-select: text; cursor: text; }
 
   .tabs {
     display: flex;
@@ -259,5 +295,28 @@
   .save-btn:disabled { opacity: 0.5; cursor: default; }
 
   .status-saved { font-size: 0.875rem; color: #4ade80; }
-  .status-error { font-size: 0.875rem; color: #f87171; }
+  .status-error {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    color: #f87171;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .err-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: #f87171;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: color 0.12s, background 0.12s;
+  }
+  .err-copy-btn:hover { color: #fca5a5; background: rgba(248,113,113,0.12); }
 </style>

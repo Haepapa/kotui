@@ -78,6 +78,15 @@ func AgentPaths(dataDir, agentID string) IdentityPaths {
 	return agentPaths(dataDir, agentID)
 }
 
+// EnsureDefaultFiles creates the agent's directory structure and default brain
+// files (soul.md, persona.md, skills.md) if they do not already exist. It is
+// safe to call at any time — existing files are never overwritten. Used by
+// InitFirstRun and GetAgentBrainFiles to guarantee files are present before
+// trying to read them.
+func EnsureDefaultFiles(paths IdentityPaths, id, name string, role models.AgentRole, model string) error {
+	return initIdentity(paths, id, name, role, model)
+}
+
 // writeInstruction writes the compiled system prompt to instruction.md.
 // Called by Spawn() and CultureUpdate() — always overwrites.
 func writeInstruction(paths IdentityPaths, content string) error {

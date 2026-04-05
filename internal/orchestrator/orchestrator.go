@@ -371,6 +371,10 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 		}
 	}
 
+	// Wrap with structured pre-flight reasoning so the agent considers
+	// identity changes and tool calls before composing its reply.
+	augmented = dmTurnPrompt(augmented)
+
 	// Serialise DM inference — only one Ollama call runs at a time.
 	// If Ollama is busy, notify the user and wait in the queue.
 	if !o.dmInferenceMu.TryLock() {
