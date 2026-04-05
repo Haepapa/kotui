@@ -539,6 +539,19 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 			Content:        response,
 			Metadata:       meta,
 		})
+
+		// Spec C: After >= 3 Boss messages, enqueue a background self-reflection.
+		// This runs at P3 so it never blocks the Boss's next interaction.
+		if ra.countBossMessages() >= reflectMinBossMessages {
+			historySnap := ra.buildHistoryText()
+			dataDir := o.cfg.DataDir
+			go func() {
+				_, _ = o.cogQueue.Submit(context.Background(), P3Background, func(qctx context.Context) error {
+					return ra.Reflect(qctx, dataDir, historySnap)
+				})
+			}()
+		}
+
 		return nil
 	})
 	return err

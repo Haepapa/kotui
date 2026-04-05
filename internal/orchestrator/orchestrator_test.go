@@ -648,3 +648,63 @@ if !strings.Contains(stripped, "Here is my plan") {
 t.Errorf("prose stripped incorrectly: %q", stripped)
 }
 }
+
+// --- Reflect: parseReflectionResponse ------------------------------------
+
+func TestParseReflectionResponse_NoChanges(t *testing.T) {
+soul, persona := orchestrator.ExportedParseReflectionResponse("NO_CHANGES")
+if soul != "" || persona != "" {
+t.Errorf("expected empty strings, got soul=%q persona=%q", soul, persona)
+}
+}
+
+func TestParseReflectionResponse_UpdatesBoth(t *testing.T) {
+resp := `UPDATE_SOUL:
+# Soul
+New soul content here.
+END_UPDATE_SOUL
+
+UPDATE_PERSONA:
+# Persona
+New persona content here.
+END_UPDATE_PERSONA`
+soul, persona := orchestrator.ExportedParseReflectionResponse(resp)
+if soul == "" {
+t.Error("expected non-empty soul")
+}
+if persona == "" {
+t.Error("expected non-empty persona")
+}
+if !strings.Contains(soul, "New soul content") {
+t.Errorf("soul content wrong: %q", soul)
+}
+if !strings.Contains(persona, "New persona content") {
+t.Errorf("persona content wrong: %q", persona)
+}
+}
+
+func TestParseReflectionResponse_UpdatesSoulOnly(t *testing.T) {
+resp := `UPDATE_SOUL:
+Updated soul.
+END_UPDATE_SOUL
+
+UPDATE_PERSONA:
+
+END_UPDATE_PERSONA`
+soul, persona := orchestrator.ExportedParseReflectionResponse(resp)
+if soul == "" {
+t.Error("expected non-empty soul")
+}
+if persona != "" {
+t.Errorf("expected empty persona, got %q", persona)
+}
+}
+
+func TestBuildReflectionPrompt_ContainsAllSections(t *testing.T) {
+prompt := orchestrator.ExportedBuildReflectionPrompt("soul content", "persona content", "boss: hello")
+for _, want := range []string{"soul content", "persona content", "boss: hello", "UPDATE_SOUL", "UPDATE_PERSONA"} {
+if !strings.Contains(prompt, want) {
+t.Errorf("prompt missing %q", want)
+}
+}
+}

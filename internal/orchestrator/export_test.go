@@ -14,6 +14,8 @@ var ExportedParseEscalation = parseEscalation
 var ExportedParseTaskList = parseTaskList
 var ExportedStripToolCallLines = stripToolCallLines
 var ExportedParseConfidenceSignal = parseConfidenceSignal
+var ExportedParseReflectionResponse = parseReflectionResponse
+var ExportedBuildReflectionPrompt = buildReflectionPrompt
 
 // ExportedLowConfidenceError allows tests to inspect the error type.
 type ExportedLowConfidenceError = LowConfidenceError
