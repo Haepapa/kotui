@@ -2,7 +2,7 @@
   import type { KotuiMessage, ViewMode, HeartbeatState, QueueState } from '../lib/types';
   import { sendBossCommand, sendDirectMessage } from '../lib/warroom';
   import { wr, agentName, goToFiles, extractSubTask } from '../stores/warroom.svelte';
-  import MermaidDiagram from './MermaidDiagram.svelte';
+  import MarkdownRenderer from './MarkdownRenderer.svelte';
 
   interface Props {
     messages: KotuiMessage[];
@@ -201,48 +201,6 @@
     return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   }
 
-  // Artifact rendering
-  const artifactPattern = /([\w./\-]+\.(go|ts|svelte|json|md|py|sh|toml|txt|yaml|yml))/g;
-
-  type ContentPart = { type: 'text' | 'artifact' | 'mermaid'; value: string };
-
-  function renderContent(content: string): ContentPart[] {
-    const parts: ContentPart[] = [];
-    // First pass: extract ```mermaid fenced blocks.
-    const mermaidRe = /```mermaid\n([\s\S]*?)```/g;
-    let cursor = 0;
-    let mMatch: RegExpExecArray | null;
-    while ((mMatch = mermaidRe.exec(content)) !== null) {
-      if (mMatch.index > cursor) {
-        parts.push(...renderTextToParts(content.slice(cursor, mMatch.index)));
-      }
-      parts.push({ type: 'mermaid', value: mMatch[1].trim() });
-      cursor = mMatch.index + mMatch[0].length;
-    }
-    if (cursor < content.length) {
-      parts.push(...renderTextToParts(content.slice(cursor)));
-    }
-    return parts.length ? parts : [{ type: 'text', value: content }];
-  }
-
-  function renderTextToParts(text: string): ContentPart[] {
-    const parts: ContentPart[] = [];
-    let last = 0;
-    let match: RegExpExecArray | null;
-    artifactPattern.lastIndex = 0;
-    while ((match = artifactPattern.exec(text)) !== null) {
-      if (match.index > last) {
-        parts.push({ type: 'text', value: text.slice(last, match.index) });
-      }
-      parts.push({ type: 'artifact', value: match[1] });
-      last = match.index + match[0].length;
-    }
-    if (last < text.length) {
-      parts.push({ type: 'text', value: text.slice(last) });
-    }
-    return parts;
-  }
-
   // Queue-aware status bar state.
   // Priority: throttled → active → p3 queued → busy → idle
   type DotColor = 'idle' | 'active' | 'queued' | 'throttled';
@@ -375,16 +333,16 @@
                   <summary class="think-summary">thinking…</summary>
                   <div class="think-body">{think}</div>
                 </details>
-                <p class="bubble-text">{#each renderContent(msg.content) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else if part.type === 'mermaid'}<MermaidDiagram diagram={part.value} />{:else}{part.value}{/if}{/each}</p>
+                <MarkdownRenderer text={msg.content} />
               {:else if parseThink(msg.content).thinking}
                 {@const parsed = parseThink(msg.content)}
                 <details class="think-block">
                   <summary class="think-summary">thinking…</summary>
                   <div class="think-body">{parsed.thinking}</div>
                 </details>
-                <p class="bubble-text">{#each renderContent(parsed.response) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else if part.type === 'mermaid'}<MermaidDiagram diagram={part.value} />{:else}{part.value}{/if}{/each}</p>
+                <MarkdownRenderer text={parsed.response} />
               {:else}
-                <p class="bubble-text">{#each renderContent(msg.content) as part}{#if part.type === 'artifact'}<span class="artifact-pill">📄 {part.value}</span>{:else if part.type === 'mermaid'}<MermaidDiagram diagram={part.value} />{:else}{part.value}{/if}{/each}</p>
+                <MarkdownRenderer text={msg.content} />
               {/if}
             </div>
           </div>
@@ -416,12 +374,12 @@
           <!-- Response bubble: shown once the model moves past the think block. -->
           {#if streamParsed.response}
             <div class="bubble bubble-agent">
-              <p class="bubble-text">{streamParsed.response}</p>
+              <MarkdownRenderer text={streamParsed.response} />
             </div>
           {:else if !streamParsed.inThink && !streamParsed.thinking}
             <!-- No thinking at all — plain streaming response. -->
             <div class="bubble bubble-agent">
-              <p class="bubble-text">{streamContent}</p>
+              <MarkdownRenderer text={streamContent} />
             </div>
           {/if}
         </div>
