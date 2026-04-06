@@ -649,23 +649,24 @@ t.Errorf("prose stripped incorrectly: %q", stripped)
 }
 }
 
-func TestStripToolCallLines_StripsTaskList(t *testing.T) {
+func TestStripToolCallLines_TaskListPreserved(t *testing.T) {
+	// Task-list arrays must NOT be stripped — parseTaskList() needs them.
 	text := "Here is my plan.\n[{\"id\":\"t1\",\"title\":\"Do it\",\"description\":\"desc\",\"assignee\":\"specialist\",\"justification\":\"just\"}]\nProceed."
 	stripped := orchestrator.ExportedStripToolCallLines(text)
-	if strings.Contains(stripped, `"title"`) {
-		t.Errorf("task list not stripped: %q", stripped)
+	if !strings.Contains(stripped, `"title"`) {
+		t.Errorf("task list was incorrectly stripped (parseTaskList needs it): %q", stripped)
 	}
 	if !strings.Contains(stripped, "Here is my plan") {
 		t.Errorf("prose stripped incorrectly: %q", stripped)
 	}
 }
 
-func TestStripToolCallLines_ConcatenatedSignals(t *testing.T) {
-	// Confidence object immediately followed by task list on same line (no space).
-	text := `{"confidence_score":0.95,"reason":"ok"}[{"id":"t1","title":"Task","description":"d","assignee":"specialist","justification":"j"}]`
+func TestStripToolCallLines_ConcatenatedObjectSignals(t *testing.T) {
+	// Two object signals concatenated on one line should both be stripped.
+	text := `{"confidence_score":0.95,"reason":"ok"}{"tool":"fs_write","args":{}}`
 	stripped := orchestrator.ExportedStripToolCallLines(text)
 	if strings.TrimSpace(stripped) != "" {
-		t.Errorf("concatenated signals not fully stripped: %q", stripped)
+		t.Errorf("concatenated object signals not fully stripped: %q", stripped)
 	}
 }
 
@@ -679,7 +680,6 @@ func TestStripToolCallLines_PreservesProse(t *testing.T) {
 		t.Errorf("prose stripped incorrectly: %q", stripped)
 	}
 }
-
 
 
 func TestParseReflectionResponse_NoChanges(t *testing.T) {

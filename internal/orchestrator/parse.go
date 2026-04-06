@@ -247,12 +247,18 @@ func parseTaskList(text string) []TaskItem {
 	return nil
 }
 
-// stripToolCallLines removes all detected signal lines from a response so
-// only the human-readable prose remains for display.
+// stripToolCallLines removes signal-only JSON lines from a response so only
+// human-readable prose remains for storage and display.
 // Strips: tool call objects, confidence signal objects, escalation objects,
-// propose_handbook objects, and task-list arrays.
-// Also handles the case where multiple JSON values are concatenated on one
-// line (e.g. the confidence object immediately followed by the task array).
+// and propose_handbook objects.
+// Task-list arrays ([{...}]) are intentionally NOT stripped here — the
+// orchestrator's parseTaskList() must be able to read them from the returned
+// string. Task-list filtering for display is handled by the frontend's
+// stripSignalLines() function (streaming bubble) and never reaches the user
+// in the persisted summary because the decomposed text is only forwarded to
+// the chat when len(tasks)==0 (in which case there is no task list anyway).
+// Also handles concatenated JSON objects on one line (e.g. a confidence
+// object immediately followed by a tool call on the same line).
 func stripToolCallLines(text string) string {
 	var out []string
 	for _, line := range strings.Split(text, "\n") {
@@ -264,23 +270,22 @@ func stripToolCallLines(text string) string {
 	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
-// isSignalLine reports whether a trimmed line is a JSON signal that should
-// be hidden from the user (confidence check, task list, tool call, escalation).
-// It uses a scan-and-decode approach so that lines like
-//
-//	{"confidence_score":0.9}[{"id":"t1",...}]
-//
-// are also caught even when multiple JSON values are concatenated.
+// isSignalLine reports whether a trimmed line consists entirely of recognised
+// JSON signal objects that should be hidden from the user.
+// Recognised signals: tool call {"tool":...}, confidence {"confidence_score":...},
+// escalation {"escalation_needed":true,...}, propose_handbook {"propose_handbook":...}.
+// Task-list arrays are NOT treated as signal lines here (see stripToolCallLines).
 func isSignalLine(line string) bool {
 	if line == "" {
 		return false
 	}
-	// Fast path: line must start with { or [.
-	if line[0] != '{' && line[0] != '[' {
+	// Only process lines starting with '{' (object signals).
+	// Lines starting with '[' (task lists) are deliberately kept.
+	if line[0] != '{' {
 		return false
 	}
-	// Attempt to decode one or more JSON values from the line.
-	// If every token on the line is a recognised signal, strip the line.
+	// Scan and decode one or more consecutive JSON objects.
+	// If every object on the line is a recognised signal, strip the line.
 	remaining := line
 	foundSignal := false
 	for len(remaining) > 0 {
@@ -288,42 +293,23 @@ func isSignalLine(line string) bool {
 		if len(remaining) == 0 {
 			break
 		}
-		if remaining[0] == '{' {
-			var probe map[string]any
-			dec := json.NewDecoder(strings.NewReader(remaining))
-			if err := dec.Decode(&probe); err != nil {
-				return false // not valid JSON — keep the line
-			}
-			_, hasToolKey := probe["tool"]
-			_, hasCS := probe["confidence_score"]
-			_, hasPropose := probe["propose_handbook"]
-			esc, _ := probe["escalation_needed"].(bool)
-			if !hasToolKey && !hasCS && !hasPropose && !esc {
-				return false // recognised object but not a signal — keep
-			}
-			foundSignal = true
-			// Advance past the decoded object.
-			remaining = remaining[dec.InputOffset():]
-		} else if remaining[0] == '[' {
-			var probe []map[string]any
-			dec := json.NewDecoder(strings.NewReader(remaining))
-			if err := dec.Decode(&probe); err != nil {
-				return false
-			}
-			// Only strip if it looks like a task list (has id + title).
-			if len(probe) == 0 {
-				return false
-			}
-			_, hasID := probe[0]["id"]
-			_, hasTitle := probe[0]["title"]
-			if !hasID || !hasTitle {
-				return false
-			}
-			foundSignal = true
-			remaining = remaining[dec.InputOffset():]
-		} else {
-			return false // non-JSON content on the line — keep
+		if remaining[0] != '{' {
+			return false // non-object content after signal — keep the line
 		}
+		var probe map[string]any
+		dec := json.NewDecoder(strings.NewReader(remaining))
+		if err := dec.Decode(&probe); err != nil {
+			return false // not valid JSON — keep the line
+		}
+		_, hasToolKey := probe["tool"]
+		_, hasCS := probe["confidence_score"]
+		_, hasPropose := probe["propose_handbook"]
+		esc, _ := probe["escalation_needed"].(bool)
+		if !hasToolKey && !hasCS && !hasPropose && !esc {
+			return false // valid object but not a recognised signal — keep
+		}
+		foundSignal = true
+		remaining = remaining[dec.InputOffset():]
 	}
 	return foundSignal
 }
