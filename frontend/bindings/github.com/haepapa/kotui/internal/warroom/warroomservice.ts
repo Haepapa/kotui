@@ -53,6 +53,13 @@ export function DeleteOllamaModel(endpoint: string, name: string): $CancellableP
 }
 
 /**
+ * DeleteSandboxFile removes a file (or empty directory) from the agent workspace.
+ */
+export function DeleteSandboxFile(relPath: string): $CancellablePromise<void> {
+    return $Call.ByID(1612808497, relPath);
+}
+
+/**
  * EmitBrainUpdate records a system_event in the agent's DM conversation and
  * fires a kotui:brain_update event so the frontend can update the unread badge.
  * Called both from SaveAgentBrainFile (user-initiated) and from the update_self
@@ -239,12 +246,29 @@ export function RenameProject(id: string, name: string, description: string): $C
 }
 
 /**
+ * RenameSandboxFile renames a file or directory within the sandbox.
+ * newName must be a plain file/directory name (no path separators).
+ */
+export function RenameSandboxFile(relPath: string, newName: string): $CancellablePromise<void> {
+    return $Call.ByID(589647294, relPath, newName);
+}
+
+/**
  * ResetAppData wipes all user data and resets the configuration to defaults.
  * This deletes all chat history, projects, agents, agent identity files, and
  * resets config.toml. The caller must restart (or reload) the app afterwards.
  */
 export function ResetAppData(): $CancellablePromise<void> {
     return $Call.ByID(4104306593);
+}
+
+/**
+ * RevealSandboxFile opens the OS file explorer and selects/highlights the file.
+ * On macOS this opens Finder; on Linux it opens the parent directory in the
+ * default file manager; on Windows it opens Explorer with the file selected.
+ */
+export function RevealSandboxFile(relPath: string): $CancellablePromise<void> {
+    return $Call.ByID(820944791, relPath);
 }
 
 /**

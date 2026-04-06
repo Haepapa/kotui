@@ -33,6 +33,9 @@ import {
   ResetAppData as _ResetAppData,
   ListSandboxFiles as _ListSandboxFiles,
   ReadSandboxFile as _ReadSandboxFile,
+  DeleteSandboxFile as _DeleteSandboxFile,
+  RenameSandboxFile as _RenameSandboxFile,
+  RevealSandboxFile as _RevealSandboxFile,
 } from '../../bindings/github.com/haepapa/kotui/internal/warroom/warroomservice';
 import type { BrainFiles as _BrainFiles, FirstRunResult as _FirstRunResult } from '../../bindings/github.com/haepapa/kotui/internal/warroom/models';
 
@@ -212,4 +215,16 @@ export function listSandboxFiles(): Promise<FileEntry[]> {
 
 export function readSandboxFile(relPath: string): Promise<string> {
   return _ReadSandboxFile(relPath);
+}
+
+export function deleteSandboxFile(relPath: string): Promise<void> {
+  return _DeleteSandboxFile(relPath) as Promise<void>;
+}
+
+export function renameSandboxFile(relPath: string, newName: string): Promise<void> {
+  return _RenameSandboxFile(relPath, newName) as Promise<void>;
+}
+
+export function revealSandboxFile(relPath: string): Promise<void> {
+  return _RevealSandboxFile(relPath) as Promise<void>;
 }

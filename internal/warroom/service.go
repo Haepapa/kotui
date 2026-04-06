@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -1020,12 +1022,18 @@ func (s *WarRoomService) ResetAppData(ctx context.Context) error {
 		return fmt.Errorf("reset: agents dir: %w", err)
 	}
 
-	// 3. Delete the company identity file.
+	// 3. Delete the sandbox (agent-created workspace files).
+	sandboxDir := filepath.Join(s.cfg.App.DataDir, "sandbox")
+	if err := os.RemoveAll(sandboxDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("reset: sandbox dir: %w", err)
+	}
+
+	// 4. Delete the company identity file.
 	if err := os.Remove(s.companyIdentityPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("reset: company identity: %w", err)
 	}
 
-	// 4. Overwrite config with defaults (preserving the data_dir path).
+	// 5. Overwrite config with defaults (preserving the data_dir path).
 	defaults := config.Defaults()
 	defaults.App.DataDir = s.cfg.App.DataDir
 	if err := writeDefaultConfig(s.cfgPath, defaults); err != nil {
@@ -1455,4 +1463,91 @@ func (s *WarRoomService) ReadSandboxFile(ctx context.Context, relPath string) (s
 		return "", fmt.Errorf("read sandbox file: %w", err)
 	}
 	return string(data), nil
+}
+
+// sandboxAbs resolves a sandbox-relative path to an absolute path and validates
+// that it remains inside the sandbox root. Returns an error if not.
+func (s *WarRoomService) sandboxAbs(relPath string) (root, abs string, err error) {
+	root = filepath.Join(s.cfg.App.DataDir, "sandbox")
+	abs = filepath.Join(root, filepath.Clean(relPath))
+	if !strings.HasPrefix(abs, root+string(filepath.Separator)) && abs != root {
+		return root, "", fmt.Errorf("path escapes sandbox: %s", relPath)
+	}
+	return root, abs, nil
+}
+
+// DeleteSandboxFile removes a file (or empty directory) from the agent workspace.
+func (s *WarRoomService) DeleteSandboxFile(ctx context.Context, relPath string) error {
+	_, abs, err := s.sandboxAbs(relPath)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return fmt.Errorf("delete sandbox file: %w", err)
+	}
+	if info.IsDir() {
+		if err := os.RemoveAll(abs); err != nil {
+			return fmt.Errorf("delete sandbox dir: %w", err)
+		}
+	} else {
+		if err := os.Remove(abs); err != nil {
+			return fmt.Errorf("delete sandbox file: %w", err)
+		}
+	}
+	return nil
+}
+
+// RenameSandboxFile renames a file or directory within the sandbox.
+// newName must be a plain file/directory name (no path separators).
+func (s *WarRoomService) RenameSandboxFile(ctx context.Context, relPath, newName string) error {
+	if strings.ContainsAny(newName, "/\\") {
+		return fmt.Errorf("rename: newName must not contain path separators")
+	}
+	if newName == "" {
+		return fmt.Errorf("rename: newName is empty")
+	}
+	root, abs, err := s.sandboxAbs(relPath)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return fmt.Errorf("rename sandbox file: %w", err)
+	}
+	newAbs := filepath.Join(filepath.Dir(abs), newName)
+	// Prevent escaping sandbox via parent-relative new name.
+	if !strings.HasPrefix(newAbs, root+string(filepath.Separator)) {
+		return fmt.Errorf("rename: target path escapes sandbox")
+	}
+	if err := os.Rename(abs, newAbs); err != nil {
+		return fmt.Errorf("rename sandbox file: %w", err)
+	}
+	return nil
+}
+
+// RevealSandboxFile opens the OS file explorer and selects/highlights the file.
+// On macOS this opens Finder; on Linux it opens the parent directory in the
+// default file manager; on Windows it opens Explorer with the file selected.
+func (s *WarRoomService) RevealSandboxFile(ctx context.Context, relPath string) error {
+	_, abs, err := s.sandboxAbs(relPath)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return fmt.Errorf("reveal sandbox file: %w", err)
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.CommandContext(ctx, "open", "-R", abs)
+	case "windows":
+		cmd = exec.CommandContext(ctx, "explorer", "/select,"+abs)
+	default:
+		// Linux: open the parent directory in the default file manager.
+		cmd = exec.CommandContext(ctx, "xdg-open", filepath.Dir(abs))
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("reveal sandbox file: %w", err)
+	}
+	return nil
 }

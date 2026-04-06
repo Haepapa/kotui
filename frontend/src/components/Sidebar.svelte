@@ -284,7 +284,11 @@
         {#if wr.activeView === 'files'}
           <span class="active-pip"></span>
         {/if}
-        <span class="nav-hash">📁</span>
+        <span class="nav-hash">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </span>
         <span class="nav-item-text">Files</span>
         {#if wr.files.filter(f => !f.is_dir).length > 0}
           <span class="unread-badge">{wr.files.filter(f => !f.is_dir).length}</span>
