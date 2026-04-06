@@ -32,7 +32,7 @@ var assets embed.FS
 // runGUI starts the full Wails desktop application.
 func runGUI(cfg config.Config, db *store.DB) {
 	disp := dispatcher.New()
-	ollamaClient := ollama.New(cfg.Ollama.Endpoint)
+	ollamaClient := ollama.New(cfg.Ollama.Endpoint).WithTimeout(cfg.Ollama.RequestTimeout)
 
 	var memStore *memory.Store
 	if cfg.Models.Embedder != "" {

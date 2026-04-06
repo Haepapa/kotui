@@ -129,7 +129,7 @@ func Defaults() Config {
 		Ollama: OllamaConfig{
 			Endpoint:          "http://localhost:11434",
 			HeartbeatInterval: 10 * time.Second,
-			RequestTimeout:    90 * time.Second,
+		RequestTimeout:    10 * time.Minute,
 		},
 		Models: ModelsConfig{
 			Lead:       "qwen2.5-coder:32b",

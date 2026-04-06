@@ -59,8 +59,9 @@ type HeartbeatState struct {
 
 // UIConfig is a flat serialisable struct covering all user-editable settings.
 type UIConfig struct {
-	OllamaEndpoint   string `json:"ollama_endpoint"`
-	LeadModel        string `json:"lead_model"`
+	OllamaEndpoint    string `json:"ollama_endpoint"`
+	InferenceTimeout  int    `json:"inference_timeout"` // seconds; 0 = use default (600)
+	LeadModel         string `json:"lead_model"`
 	WorkerModel      string `json:"worker_model"`
 	EmbedderModel    string `json:"embedder_model"`
 	SeniorModel      string `json:"senior_model"`
@@ -805,6 +806,7 @@ func (s *WarRoomService) applyHandbookProposal(ctx context.Context, proposalText
 func (s *WarRoomService) GetConfig(ctx context.Context) (UIConfig, error) {
 	return UIConfig{
 		OllamaEndpoint:      s.cfg.Ollama.Endpoint,
+		InferenceTimeout:    int(s.cfg.Ollama.RequestTimeout.Seconds()),
 		LeadModel:           s.cfg.Models.Lead,
 		WorkerModel:         s.cfg.Models.Specialist,
 		EmbedderModel:       s.cfg.Models.Embedder,
@@ -831,6 +833,9 @@ func (s *WarRoomService) GetConfig(ctx context.Context) (UIConfig, error) {
 func (s *WarRoomService) SaveConfig(ctx context.Context, uiCfg UIConfig) error {
 	s.mu.Lock()
 	s.cfg.Ollama.Endpoint = uiCfg.OllamaEndpoint
+	if uiCfg.InferenceTimeout > 0 {
+		s.cfg.Ollama.RequestTimeout = time.Duration(uiCfg.InferenceTimeout) * time.Second
+	}
 	s.cfg.Models.Lead = uiCfg.LeadModel
 	s.cfg.Models.Specialist = uiCfg.WorkerModel
 	s.cfg.Models.Embedder = uiCfg.EmbedderModel

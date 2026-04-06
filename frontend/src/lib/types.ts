@@ -73,6 +73,7 @@ export interface Approval {
 
 export interface UIConfig {
   ollama_endpoint: string;
+  inference_timeout: number; // seconds
   lead_model: string;
   worker_model: string;
   embedder_model: string;

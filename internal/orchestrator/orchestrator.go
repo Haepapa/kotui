@@ -277,6 +277,12 @@ func (o *Orchestrator) channelRawFn(agentID string) func(models.MessageKind, str
 // onChunk, if non-nil, receives streamed tokens from the Lead for the live
 // typing effect in the channel chat (same mechanism as DM streaming).
 func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, onChunk func(string)) error {
+	// Apply a per-call watchdog so a stuck or over-thinking model can't block
+	// the channel indefinitely. 30 minutes matches the DM path watchdog.
+	watchdogCtx, watchdogCancel := context.WithTimeout(ctx, 30*time.Minute)
+	defer watchdogCancel()
+	ctx = watchdogCtx
+
 	o.disp.DispatchSummary(models.Message{
 		ProjectID:      o.projectID,
 		ConversationID: o.convID,

@@ -222,6 +222,11 @@ export class HeartbeatState {
  */
 export class UIConfig {
     "ollama_endpoint": string;
+
+    /**
+     * seconds; 0 = use default (600)
+     */
+    "inference_timeout": number;
     "lead_model": string;
     "worker_model": string;
     "embedder_model": string;
@@ -261,6 +266,9 @@ export class UIConfig {
     constructor($$source: Partial<UIConfig> = {}) {
         if (!("ollama_endpoint" in $$source)) {
             this["ollama_endpoint"] = "";
+        }
+        if (!("inference_timeout" in $$source)) {
+            this["inference_timeout"] = 0;
         }
         if (!("lead_model" in $$source)) {
             this["lead_model"] = "";

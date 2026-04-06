@@ -6,6 +6,7 @@
 
   let cfg = $state<UIConfig>({
     ollama_endpoint: '',
+    inference_timeout: 600,
     lead_model: '',
     worker_model: '',
     embedder_model: '',
@@ -234,6 +235,14 @@
           <button class="icon-btn" onclick={() => refreshModels(local, cfg.ollama_endpoint)} title="Refresh" disabled={local.loading}>
             {local.loading ? '…' : '↻'}
           </button>
+        </div>
+      </label>
+
+      <label>
+        <span>Inference Timeout (seconds)</span>
+        <div class="input-row">
+          <input type="number" min="30" max="3600" step="30" bind:value={cfg.inference_timeout} placeholder="600" style="max-width: 120px" />
+          <span class="field-hint">Default 600s (10 min). Increase for large thinking models.</span>
         </div>
       </label>
 
@@ -668,9 +677,16 @@
     display: flex;
     gap: 0.375rem;
     min-width: 0;
+    align-items: center;
+    flex-wrap: wrap;
   }
   .input-row input { flex: 1; }
   .model-select { width: 100%; flex: 1; }
+  .field-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    flex-basis: 100%;
+  }
 
   .icon-btn {
     flex-shrink: 0;
