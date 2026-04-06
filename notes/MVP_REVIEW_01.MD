@@ -1,7 +1,7 @@
 # MVP Review & Evolution Specs (v0.1)
 
 ## 1. Executive Summary: Codebase vs. Vision
-The current implementation of **Kotui** is a high-fidelity realization of the `TECHNICAL_ARCH.md` and `DEV_PLAN.md`. The "Trust Kernel" (Phases 0–6) is exceptionally stable, with a clear separation of concerns between the Dispatcher, the MCP Tool Engine, and the Orchestrator. The project has already matured into Phase 10 (Self-Built Tools), demonstrating a high level of autonomy.
+The current implementation of **Kōtui** is a high-fidelity realization of the `TECHNICAL_ARCH.md` and `DEV_PLAN.md`. The "Trust Kernel" (Phases 0–6) is exceptionally stable, with a clear separation of concerns between the Dispatcher, the MCP Tool Engine, and the Orchestrator. The project has already matured into Phase 10 (Self-Built Tools), demonstrating a high level of autonomy.
 
 ### Key Successes
 *   **Resource Intelligence:** The VRAM Coordinator (`internal/ollama/vram.go`) effectively manages model swapping, making the app viable on 8GB–16GB RAM machines.

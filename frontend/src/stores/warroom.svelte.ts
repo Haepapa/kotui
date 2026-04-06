@@ -70,8 +70,9 @@ export const wr = $state({
   // Reverse-lookup: convID → agentID, used to route incoming messages to the right badge.
   dmAgentByConv: {} as Record<string, string>,
 
-  // Live streaming content for channel chat — cleared when the final message arrives.
-  channelStream: '',
+  // Live streaming content for channel chat — keyed by convID, same pattern as DMs.
+  // This prevents a stream from one channel leaking into another when the user navigates.
+  channelConvStream: {} as Record<string, string>,
 
   // Cognition queue state — updated via kotui:queue_state events.
   queueState: {
@@ -181,7 +182,7 @@ export async function initWarRoom() {
       // Clear the live stream when a final summary message arrives so the stream
       // bubble is replaced by the real message bubble (same as DM behaviour).
       if (msg.tier !== 'raw' && (msg.kind === 'agent_message' || msg.kind === 'milestone')) {
-        wr.channelStream = '';
+        wr.channelConvStream[cid] = '';
       }
       wr.messages = [...wr.messages, msg];
       // Increment channel unread when the user isn't watching this channel's chat.
@@ -196,13 +197,15 @@ export async function initWarRoom() {
   // This prevents raw system_event log messages from clearing the typing indicator.
   unsubChannelBusy = onChannelBusy((busy) => {
     wr.isBusy = busy;
-    // Belt-and-suspenders: clear any residual stream when the channel goes idle.
-    if (!busy) wr.channelStream = '';
+    // Belt-and-suspenders: clear any residual stream for the active channel when it goes idle.
+    if (!busy) wr.channelConvStream[wr.activeConvID] = '';
   });
 
-  // Channel streaming chunks — accumulate per response, cleared on message arrival.
+  // Channel streaming chunks — accumulate per response, routed by conversation_id.
   unsubChannelStream = onChannelStream((payload) => {
-    wr.channelStream = (wr.channelStream ?? '') + payload.chunk;
+    if (!payload?.conversation_id) return;
+    const cid = payload.conversation_id;
+    wr.channelConvStream[cid] = (wr.channelConvStream[cid] ?? '') + payload.chunk;
   });
 
   // Cognition queue state — emitted by the backend on every enqueue/dequeue/execution change.

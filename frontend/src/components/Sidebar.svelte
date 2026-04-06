@@ -65,7 +65,6 @@
     }
     wr.activeView = 'chat';
     wr.messages = [];
-    wr.channelStream = '';
     try {
       wr.activeConvID = (await getActiveConversation()) ?? '';
       if (wr.activeConvID) {

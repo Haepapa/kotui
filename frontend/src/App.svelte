@@ -63,6 +63,7 @@
   );
   const dmBusy = $derived(wr.dmConvBusy[wr.activeDMConvID] ?? false);
   const dmStream = $derived(wr.dmConvStream[wr.activeDMConvID] ?? '');
+  const channelStream = $derived(wr.channelConvStream[wr.activeConvID] ?? '');
   const channelTitle = $derived(() => {
     if (wr.activeView === 'settings') return 'Infrastructure Office';
     if (wr.activeView === 'identity') return 'Company Identity';
@@ -191,7 +192,9 @@
           <EngineRoom messages={dmEngineMsgs} />
         {/if}
       {:else}
-        <ChatArea messages={visibleMsgs} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} queueState={wr.queueState} streamContent={wr.channelStream} />
+        {#key wr.activeConvID}
+          <ChatArea messages={visibleMsgs} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} queueState={wr.queueState} streamContent={channelStream} />
+        {/key}
         {#if wr.viewMode === 'dev'}
           <EngineRoom messages={engineMsgs} />
         {/if}

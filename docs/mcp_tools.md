@@ -1,6 +1,6 @@
 # MCP Tool Execution: Capabilities & Safety
 
-The Model Context Protocol (MCP) is how Kotui agents interact with the real world. This document explains the execution pipeline and lists the available tools.
+The Model Context Protocol (MCP) is how Kōtui agents interact with the real world. This document explains the execution pipeline and lists the available tools.
 
 ---
 
@@ -42,7 +42,7 @@ graph TD
 
 ## 2. Available Tool Registry
 
-Below are the core tools currently implemented in the Kotui engine.
+Below are the core tools currently implemented in the Kōtui engine.
 
 ### `filesystem` (Clearance: Specialist)
 *   **Description**: Read, write, delete, or list files in the project workspace.
