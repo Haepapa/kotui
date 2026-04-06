@@ -649,7 +649,38 @@ t.Errorf("prose stripped incorrectly: %q", stripped)
 }
 }
 
-// --- Reflect: parseReflectionResponse ------------------------------------
+func TestStripToolCallLines_StripsTaskList(t *testing.T) {
+	text := "Here is my plan.\n[{\"id\":\"t1\",\"title\":\"Do it\",\"description\":\"desc\",\"assignee\":\"specialist\",\"justification\":\"just\"}]\nProceed."
+	stripped := orchestrator.ExportedStripToolCallLines(text)
+	if strings.Contains(stripped, `"title"`) {
+		t.Errorf("task list not stripped: %q", stripped)
+	}
+	if !strings.Contains(stripped, "Here is my plan") {
+		t.Errorf("prose stripped incorrectly: %q", stripped)
+	}
+}
+
+func TestStripToolCallLines_ConcatenatedSignals(t *testing.T) {
+	// Confidence object immediately followed by task list on same line (no space).
+	text := `{"confidence_score":0.95,"reason":"ok"}[{"id":"t1","title":"Task","description":"d","assignee":"specialist","justification":"j"}]`
+	stripped := orchestrator.ExportedStripToolCallLines(text)
+	if strings.TrimSpace(stripped) != "" {
+		t.Errorf("concatenated signals not fully stripped: %q", stripped)
+	}
+}
+
+func TestStripToolCallLines_PreservesProse(t *testing.T) {
+	text := "I will write the file now.\n{\"tool\":\"fs_write\",\"args\":{\"path\":\"out.txt\",\"content\":\"hello\"}}\nDone."
+	stripped := orchestrator.ExportedStripToolCallLines(text)
+	if strings.Contains(stripped, `"tool"`) {
+		t.Errorf("tool call not stripped: %q", stripped)
+	}
+	if !strings.Contains(stripped, "I will write") || !strings.Contains(stripped, "Done.") {
+		t.Errorf("prose stripped incorrectly: %q", stripped)
+	}
+}
+
+
 
 func TestParseReflectionResponse_NoChanges(t *testing.T) {
 soul, persona := orchestrator.ExportedParseReflectionResponse("NO_CHANGES")

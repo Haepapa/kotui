@@ -247,31 +247,83 @@ func parseTaskList(text string) []TaskItem {
 	return nil
 }
 
-// stripToolCallLines removes all detected tool call lines from a response so
+// stripToolCallLines removes all detected signal lines from a response so
 // only the human-readable prose remains for display.
-// Also strips confidence signal lines and escalation lines.
+// Strips: tool call objects, confidence signal objects, escalation objects,
+// propose_handbook objects, and task-list arrays.
+// Also handles the case where multiple JSON values are concatenated on one
+// line (e.g. the confidence object immediately followed by the task array).
 func stripToolCallLines(text string) string {
 	var out []string
 	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "{") {
-			var probe map[string]any
-			if json.Unmarshal([]byte(trimmed), &probe) == nil {
-				if _, hasToolKey := probe["tool"]; hasToolKey {
-					continue
-				}
-				if esc, _ := probe["escalation_needed"].(bool); esc {
-					continue
-				}
-				if _, hasCS := probe["confidence_score"]; hasCS {
-					continue
-				}
-				if _, hasPropose := probe["propose_handbook"]; hasPropose {
-					continue
-				}
-			}
+		if isSignalLine(strings.TrimSpace(line)) {
+			continue
 		}
 		out = append(out, line)
 	}
 	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+// isSignalLine reports whether a trimmed line is a JSON signal that should
+// be hidden from the user (confidence check, task list, tool call, escalation).
+// It uses a scan-and-decode approach so that lines like
+//
+//	{"confidence_score":0.9}[{"id":"t1",...}]
+//
+// are also caught even when multiple JSON values are concatenated.
+func isSignalLine(line string) bool {
+	if line == "" {
+		return false
+	}
+	// Fast path: line must start with { or [.
+	if line[0] != '{' && line[0] != '[' {
+		return false
+	}
+	// Attempt to decode one or more JSON values from the line.
+	// If every token on the line is a recognised signal, strip the line.
+	remaining := line
+	foundSignal := false
+	for len(remaining) > 0 {
+		remaining = strings.TrimSpace(remaining)
+		if len(remaining) == 0 {
+			break
+		}
+		if remaining[0] == '{' {
+			var probe map[string]any
+			dec := json.NewDecoder(strings.NewReader(remaining))
+			if err := dec.Decode(&probe); err != nil {
+				return false // not valid JSON — keep the line
+			}
+			_, hasToolKey := probe["tool"]
+			_, hasCS := probe["confidence_score"]
+			_, hasPropose := probe["propose_handbook"]
+			esc, _ := probe["escalation_needed"].(bool)
+			if !hasToolKey && !hasCS && !hasPropose && !esc {
+				return false // recognised object but not a signal — keep
+			}
+			foundSignal = true
+			// Advance past the decoded object.
+			remaining = remaining[dec.InputOffset():]
+		} else if remaining[0] == '[' {
+			var probe []map[string]any
+			dec := json.NewDecoder(strings.NewReader(remaining))
+			if err := dec.Decode(&probe); err != nil {
+				return false
+			}
+			// Only strip if it looks like a task list (has id + title).
+			if len(probe) == 0 {
+				return false
+			}
+			_, hasID := probe[0]["id"]
+			_, hasTitle := probe[0]["title"]
+			if !hasID || !hasTitle {
+				return false
+			}
+			foundSignal = true
+			remaining = remaining[dec.InputOffset():]
+		} else {
+			return false // non-JSON content on the line — keep
+		}
+	}
+	return foundSignal
 }

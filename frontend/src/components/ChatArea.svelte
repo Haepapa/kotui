@@ -86,7 +86,66 @@
   }
 
   // Derived: split the live stream into thinking vs response parts.
-  const streamParsed = $derived(parseThink(streamContent));
+  // Apply signal stripping to the response portion so JSON tool calls,
+  // confidence checks, and task-list arrays don't appear in the typing bubble.
+  const streamParsed = $derived.by(() => {
+    const parsed = parseThink(streamContent);
+    return {
+      ...parsed,
+      response: stripSignalLines(parsed.response),
+    };
+  });
+
+  /**
+   * Strip signal-only JSON lines from streamed content before display.
+   * Mirrors the Go stripToolCallLines logic: removes lines that are
+   * recognised signal objects (tool call, confidence, escalation) or
+   * task-list arrays.  Non-JSON lines and unknown JSON objects are kept.
+   */
+  function stripSignalLines(text: string): string {
+    return text.split('\n').filter(line => {
+      const t = line.trim();
+      if (!t || (t[0] !== '{' && t[0] !== '[')) return true;
+      // Try to consume one or more JSON values from the line.
+      let remaining = t;
+      let foundSignal = false;
+      while (remaining.length > 0) {
+        remaining = remaining.trimStart();
+        if (!remaining) break;
+        try {
+          // JSON.parse is strict; find the end of the first value by trial.
+          // We try progressively larger substrings. For typical single-value
+          // lines this is immediate; for concatenated values it iterates.
+          let parsed: any = null;
+          let consumed = 0;
+          for (let end = 1; end <= remaining.length; end++) {
+            try {
+              parsed = JSON.parse(remaining.slice(0, end));
+              consumed = end;
+              break;
+            } catch {}
+          }
+          if (parsed === null || consumed === 0) return true; // can't parse — keep
+          if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+            const isSignal = 'tool' in parsed || 'confidence_score' in parsed
+              || 'escalation_needed' in parsed || 'propose_handbook' in parsed;
+            if (!isSignal) return true;
+            foundSignal = true;
+          } else if (Array.isArray(parsed) && parsed.length > 0
+              && typeof parsed[0] === 'object'
+              && 'id' in parsed[0] && 'title' in parsed[0]) {
+            foundSignal = true; // task list array
+          } else {
+            return true; // unknown array/value — keep
+          }
+          remaining = remaining.slice(consumed);
+        } catch {
+          return true;
+        }
+      }
+      return !foundSignal;
+    }).join('\n');
+  }
 
   async function send() {
     const cmd = input.trim();
