@@ -287,8 +287,10 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	o.log.Info("boss command received", "command", truncate(command, 80))
 
 	// Step 1: Lead decomposes the command into sub-tasks.
-	// Augment with relevant memories if available.
-	augmented := decomposePrompt(command)
+	// Pass hasHistory=true when this is a follow-up in an ongoing conversation
+	// so the prompt notes that the Boss may be answering a clarification.
+	hasHistory := len(o.lead.History()) > 0
+	augmented := decomposePrompt(command, hasHistory)
 	if o.memory != nil && o.projectID != "" {
 		entries, err := o.memory.Recall(ctx, "lead", o.projectID, command, 5)
 		if err == nil && len(entries) > 0 {
