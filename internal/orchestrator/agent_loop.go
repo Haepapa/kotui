@@ -451,12 +451,8 @@ Message from Boss:
 Respond now. Work through each step before writing your reply.`, strings.TrimSpace(message))
 }
 // a Boss command into a list of sub-tasks.
-func decomposePrompt(bossCommand string, hasHistory bool) string {
-	contextNote := ""
-	if hasHistory {
-		contextNote = "**Note: You are continuing an ongoing conversation — refer to the chat history above for context. If the Boss is answering a clarification question you asked, use their answer to proceed with the original task.**\n\n"
-	}
-	return contextNote + fmt.Sprintf(`You are the Lead agent in a team channel. A message has arrived:
+func decomposePrompt(bossCommand string) string {
+	return fmt.Sprintf(`You are the Lead agent in a team channel. A message has arrived:
 
 ---
 %s

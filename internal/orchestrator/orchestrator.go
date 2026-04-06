@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -287,10 +288,18 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	o.log.Info("boss command received", "command", truncate(command, 80))
 
 	// Step 1: Lead decomposes the command into sub-tasks.
-	// Pass hasHistory=true when this is a follow-up in an ongoing conversation
-	// so the prompt notes that the Boss may be answering a clarification.
+	// For the first message use the full task-decomposition template so the model
+	// understands its role and output format.  For follow-up messages (history
+	// already exists) send just the raw command — the model already has the
+	// instructions in its history and wrapping again makes each follow-up look
+	// like a new standalone task, causing it to forget prior context.
 	hasHistory := len(o.lead.History()) > 0
-	augmented := decomposePrompt(command, hasHistory)
+	var augmented string
+	if hasHistory {
+		augmented = fmt.Sprintf("Boss: %s\n\n(This is a follow-up to the ongoing conversation above. If it answers your clarification question, proceed with task decomposition now. Before any tool call, output a confidence signal on its own line.)", strings.TrimSpace(command))
+	} else {
+		augmented = decomposePrompt(command)
+	}
 	if o.memory != nil && o.projectID != "" {
 		entries, err := o.memory.Recall(ctx, "lead", o.projectID, command, 5)
 		if err == nil && len(entries) > 0 {
