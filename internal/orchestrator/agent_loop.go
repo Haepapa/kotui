@@ -464,9 +464,13 @@ Decide how to respond:
 1. First, assess whether the task is clear enough to act on.
    - If it is ambiguous or could have unintended consequences, DO NOT guess or assume.
      Ask the Boss one specific clarifying question.
-   - If it IS clear, decompose it into sub-tasks as a JSON array on ONE line, then briefly explain your plan.
+   - If it IS clear, you MUST output the task list as a JSON array on ONE line FIRST, then briefly explain your plan.
+     The JSON array is MANDATORY — plain text task lists will not be processed and no work will be done.
      Format: [{"id":"t1","title":"short title","description":"detail","assignee":"lead|specialist","justification":"one sentence — why this agent/approach for this task"},...]
      Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; dependencies first; justification is mandatory and specific.
+     Example of correct output:
+     [{"id":"t1","title":"Write Python script","description":"Write a script that sorts a list of dicts.","assignee":"specialist","justification":"Specialist executes code generation."}]
+     Then your brief plan explanation follows on the next line.
 2. Before making ANY tool call, output a confidence signal on its own line:
    {"confidence_score": <0.0–1.0>, "reason": "<why>"}
    - Score ≥ 0.7 → proceed with the tool call.

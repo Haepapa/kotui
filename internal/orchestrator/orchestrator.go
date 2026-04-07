@@ -346,6 +346,19 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 
 	tasks := parseTaskList(decomposed)
 
+	// Format repair: if no JSON task list was found but the response looks like
+	// a plain-text decomposition, ask the model to re-emit as JSON. This handles
+	// models that describe tasks in prose instead of following the format.
+	if len(tasks) == 0 && looksLikeDecomposition(decomposed) {
+		o.log.Info("task list not found, attempting format repair", "content_preview", decomposed[:min(80, len(decomposed))])
+		if repaired, repairErr := o.repairTaskList(ctx, decomposed); repairErr == nil {
+			tasks = parseTaskList(repaired)
+			if len(tasks) > 0 {
+				o.log.Info("format repair succeeded", "tasks", len(tasks))
+			}
+		}
+	}
+
 	// Speculative pre-loading: in VRAMDual mode, begin warming the worker model
 	// in the background while we persist tasks and prepare execution. This
 	// eliminates cold-start latency for the first specialist task.
@@ -458,6 +471,40 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	}
 
 	return nil
+}
+
+// looksLikeDecomposition returns true if text looks like a plain-text task
+// decomposition that the model forgot to format as JSON. Used to decide
+// whether to attempt a format repair pass.
+func looksLikeDecomposition(text string) bool {
+	lower := strings.ToLower(text)
+	signals := []string{
+		"task decomposition", "decompose", "sub-task", "subtask",
+		"t1:", "t2:", "step 1", "step 2",
+		"specialist", "knowledge_base", "file_manager",
+		"proceeding", "query", "execute", "implement",
+	}
+	count := 0
+	for _, s := range signals {
+		if strings.Contains(lower, s) {
+			count++
+		}
+	}
+	return count >= 2 && len(strings.Fields(text)) > 15
+}
+
+// repairTaskList sends a short follow-up asking the model to re-emit its plan
+// as a JSON array. Used when the model produced a valid-looking decomposition
+// but in the wrong format. Uses Turn (non-streaming) since this is invisible.
+func (o *Orchestrator) repairTaskList(ctx context.Context, decomposed string) (string, error) {
+	repair := fmt.Sprintf(
+		"Your previous response described tasks in plain text, but the system requires a JSON array to execute them. "+
+			"Re-emit your task list NOW as a JSON array on ONE line in exactly this format:\n"+
+			`[{"id":"t1","title":"short","description":"detail","assignee":"specialist","justification":"why"}]`+"\n\n"+
+			"Previous plan:\n%s\n\nOutput ONLY the JSON array line, nothing else.",
+		decomposed,
+	)
+	return o.lead.Turn(ctx, repair)
 }
 
 // OllamaHealthy reports whether the configured Ollama inference backend is

@@ -4,7 +4,7 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>Kotui</string>
+            <string>Kōtui</string>
         <key>CFBundleExecutable</key>
             <string>kotui</string>
         <key>CFBundleIdentifier</key>
