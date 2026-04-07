@@ -103,7 +103,7 @@ func compose(paths IdentityPaths, agentID, companyIdentityPath, handbookPath, mc
 	sb.WriteString("---\n\n")
 
 	sb.WriteString("## General Reminder\n\n")
-	sb.WriteString("You are operating within the Kotui Virtual Company. ")
+	sb.WriteString("You are operating within the Kōtui Virtual Company. ")
 	sb.WriteString("Follow the handbook above at all times. ")
 	sb.WriteString("If a task exceeds your capability ceiling, emit `escalation_needed` immediately.\n\n")
 	sb.WriteString("**Brain files** (soul.md, persona.md, skills.md) are your persistent identity files. ")

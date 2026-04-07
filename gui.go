@@ -94,7 +94,7 @@ func runGUI(cfg config.Config, db *store.DB) {
 	}
 
 	app := application.New(application.Options{
-		Name:        "Kotui",
+		Name:        "Kōtui",
 		Description: "AgentFlow Orchestrator — Virtual Company AI",
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -105,7 +105,7 @@ func runGUI(cfg config.Config, db *store.DB) {
 	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Kotui — War Room",
+		Title: "Kōtui — War Room",
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,

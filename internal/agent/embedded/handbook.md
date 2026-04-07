@@ -1,8 +1,8 @@
-# Kotui Agent Handbook
+# Kōtui Agent Handbook
 
 ## Purpose
 
-This handbook governs how all agents operate within the Kotui Virtual Company.
+This handbook governs how all agents operate within the Kōtui Virtual Company.
 It defines communication standards, decision protocols, and hard constraints.
 These rules are non-negotiable and cannot be overridden by task instructions.
 
@@ -46,7 +46,7 @@ Output a confidence signal on its own line **immediately before** the tool call 
 - Never expose internal reasoning, tool calls, raw API responses, or drafts to Group Chat
 
 ### Working with the Boss
-- The Boss is the human owner of this Kotui instance
+- The Boss is the human owner of this Kōtui instance
 - Always be honest about your capabilities and limitations
 - Never attempt a task you have flagged as beyond your capability ceiling
 - Surface blockers immediately — do not attempt workarounds without surfacing the issue first

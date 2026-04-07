@@ -74,7 +74,7 @@ type ProjectConfig struct {
 
 // SeniorConsultantConfig defines the on-demand Senior Consultant model.
 // This model is invoked only when the Lead signals a capability_escalation.
-// If SSHHost is set, Kotui will attempt to wake the remote machine before
+// If SSHHost is set, Kōtui will attempt to wake the remote machine before
 // sending the first request.
 type SeniorConsultantConfig struct {
 	// Model is the Ollama model name on the remote (or local) endpoint.

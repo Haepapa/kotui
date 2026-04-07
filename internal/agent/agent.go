@@ -1,4 +1,4 @@
-// Package agent manages the full lifecycle of Kotui agents:
+// Package agent manages the full lifecycle of Kōtui agents:
 // identity filesystem, system prompt composition, journaling, and
 // skill proposals. Phase 6 wires in the Ollama client and Dispatcher
 // to enable actual inference.

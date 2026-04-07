@@ -1,4 +1,4 @@
-// Package orchestrator is the top-level coordinator of the Kotui Virtual Company.
+// Package orchestrator is the top-level coordinator of the Kōtui Virtual Company.
 //
 // It integrates all prior phases:
 //   - Phase 1 (Ollama) — model inference via the Inferrer interface
