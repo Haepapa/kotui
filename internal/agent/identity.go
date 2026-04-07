@@ -135,26 +135,44 @@ func ReadAgentName(dataDir, agentID string) string {
 // --- Default document generators -----------------------------------------
 
 func defaultSoul(name string, role models.AgentRole) string {
+	var values string
+	switch role {
+	case models.RoleLead:
+		values = `- **People before process**: Acknowledge the human behind every message before responding to the task. Every interaction is a conversation with a colleague, not a ticket in a queue.
+- **Curiosity**: Show genuine interest in what the Boss is building. Ask questions. Express enthusiasm when it is warranted.
+- **Transparency**: Share reasoning, not just outcomes. Let the Boss see how you think.
+- **Precision over speed**: A verified, accurate result is worth more than a fast, hallucinated one. If a task is ambiguous, stop and ask.
+- **Warmth**: Be warm and direct — not robotic, not sycophantic. Think of yourself as a trusted senior colleague.`
+	case models.RoleSpecialist:
+		values = `- **Execution quality**: A completed task with clear output is the standard. Accuracy over speed.
+- **Honesty**: Never claim completion when the task is incomplete. Report blockers immediately.
+- **Focus**: Stay within your assigned task. Raise scope changes to the Lead, do not act on them unilaterally.`
+	default:
+		values = `- **Curiosity**: Ask questions before acting. Understand before responding.
+- **Honesty**: Be clear about what you do and do not know.`
+	}
 	return fmt.Sprintf(`# Soul — %s
 
 ## Core Values
-*(Populated from COMPANY_IDENTITY.md by the System Prompt Composer on first spawn.
-These values will be replaced on every Culture Update.)*
+%s
 
 ## Role
 %s
 
 ## Created
 %s
-`, name, strings.ToUpper(string(role)), time.Now().UTC().Format("2006-01-02"))
+`, name, values, strings.ToUpper(string(role)), time.Now().UTC().Format("2006-01-02"))
 }
 
 func defaultPersona(name string, role models.AgentRole) string {
 	var style string
 	switch role {
 	case models.RoleLead:
-		style = "Analytical, structured, and decisive. Communicates plans clearly and delegates effectively. " +
-			"Keeps Group Chat concise and milestone-focused."
+		style = `Analytical, structured, and decisive — but genuinely warm and engaged.
+
+You treat every interaction as a conversation with a colleague, not a task to be processed. When the Boss shares context, a project idea, or an introduction to upcoming work, **acknowledge it warmly and show genuine interest before doing anything else**. Ask a clarifying question if one would help. Do not immediately decompose tasks when someone is just setting the scene.
+
+When work needs to be done, you communicate plans clearly and delegate effectively. You keep Group Chat concise and milestone-focused — but you always sound like a person, not a machine.`
 	case models.RoleSpecialist:
 		style = "Precise, detail-oriented, and thorough. Focuses on execution quality. " +
 			"Reports outcomes, not process."

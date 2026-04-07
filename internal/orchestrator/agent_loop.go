@@ -458,27 +458,40 @@ func decomposePrompt(bossCommand string) string {
 %s
 ---
 
-Decide how to respond:
+**Step 0 — Understand what type of message this is:**
 
-**If this is a task or request that requires work** (e.g. "build X", "write Y", "research Z", "find out…"):
-1. First, assess whether the task is clear enough to act on.
-   - If it is ambiguous or could have unintended consequences, DO NOT guess or assume.
-     Ask the Boss one specific clarifying question.
-   - If it IS clear, you MUST output the task list as a JSON array on ONE line FIRST, then briefly explain your plan.
+Before doing anything, decide which category this falls into:
+
+**(A) A specific, executable task** — a direct instruction with a clear deliverable.
+  Signals: imperative verbs ("write", "build", "fix", "create", "find", "analyse"), short and action-focused, names a concrete output.
+
+**(B) A project brief, introduction, or context-setting message** — the Boss is sharing background, explaining what they plan to work on, or setting the scene for future work. They are NOT asking you to start executing right now.
+  Signals: future intent ("you will help me", "I want to", "we will be", "I'm going to"), a greeting combined with a project description, no explicit instruction verb, or the message reads more like "here's what I'm working on" than "go do X".
+
+**(C) Conversational** — a greeting, question, general discussion, or "hi team".
+
+---
+
+**If (B) — project brief or context-setting:**
+Respond warmly as a team lead would. Acknowledge what the Boss has shared, express genuine interest, and ask one focused clarifying question that will help when work begins. Do NOT output a task list. Do NOT start any execution. This is a conversation, not a task.
+
+**If (C) — conversational:**
+Respond naturally and warmly. Acknowledge any team members mentioned. No JSON, no task list.
+
+**If (A) — specific task:**
+1. Assess whether it is clear enough to act on.
+   - If ambiguous or risky: ask the Boss one specific clarifying question. Do NOT guess.
+   - If clear: briefly acknowledge it in one sentence, then output the task list as a JSON array on ONE line, then briefly explain your plan.
      The JSON array is MANDATORY — plain text task lists will not be processed and no work will be done.
      Format: [{"id":"t1","title":"short title","description":"detail","assignee":"lead|specialist","justification":"one sentence — why this agent/approach for this task"},...]
-     Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; dependencies first; justification is mandatory and specific.
-     Example of correct output:
-     [{"id":"t1","title":"Write Python script","description":"Write a script that sorts a list of dicts.","assignee":"specialist","justification":"Specialist executes code generation."}]
-     Then your brief plan explanation follows on the next line.
+     Rules: assignee is "lead" (planning/verification) or "specialist" (execution); 1–2 sentence descriptions; justification is mandatory and specific.
+     Example:
+     Sounds like a clear task — let me get the team on it.
+     [{"id":"t1","title":"Write sorting script","description":"Write a Python script that sorts a list of dicts.","assignee":"specialist","justification":"Specialist executes code generation."}]
 2. Before making ANY tool call, output a confidence signal on its own line:
    {"confidence_score": <0.0–1.0>, "reason": "<why>"}
    - Score ≥ 0.7 → proceed with the tool call.
-   - Score < 0.7 → output ONLY the confidence signal; do NOT proceed. Explain what's needed.
+   - Score < 0.7 → output ONLY the signal; do NOT proceed. Explain what's needed.
 
-**If this is conversational** (greetings, general discussion, questions, "hi team", etc.):
-1. Respond naturally and warmly as the team lead — no JSON, no task list.
-2. Acknowledge any team members mentioned and set a positive tone.
-
-Respond appropriately now.`, strings.TrimSpace(bossCommand))
+Respond now.`, strings.TrimSpace(bossCommand))
 }

@@ -270,7 +270,29 @@ func stripToolCallLines(text string) string {
 	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
-// isSignalLine reports whether a trimmed line consists entirely of recognised
+// humanReadableDecomposed strips all signal lines AND task-list JSON arrays from
+// a decomposed response, leaving only the prose the Lead wrote around them.
+// This is used to extract a social preamble/acknowledgement for display to the
+// Boss before workers begin execution.
+func humanReadableDecomposed(text string) string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Skip signal lines (tool calls, confidence, escalation)
+		if isSignalLine(trimmed) {
+			continue
+		}
+		// Skip task-list JSON arrays
+		if strings.HasPrefix(trimmed, "[") {
+			var check []TaskItem
+			if json.Unmarshal([]byte(trimmed), &check) == nil && len(check) > 0 {
+				continue
+			}
+		}
+		out = append(out, line)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
 // JSON signal objects that should be hidden from the user.
 // Recognised signals: tool call {"tool":...}, confidence {"confidence_score":...},
 // escalation {"escalation_needed":true,...}, propose_handbook {"propose_handbook":...}.

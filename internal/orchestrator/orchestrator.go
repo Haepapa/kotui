@@ -369,17 +369,32 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 		}
 	}
 	if len(tasks) == 0 {
-		// Lead may have just answered directly (simple tasks).
+		// Lead answered directly (conversational, project brief, or simple task).
 		o.disp.DispatchSummary(models.Message{
 			ProjectID:      o.projectID,
 			ConversationID: o.convID,
 			Kind:           models.KindAgentMessage,
 			Tier:           models.TierSummary,
 			AgentID:        "lead",
-			Content:        decomposed,
+			Content:        humanReadableDecomposed(decomposed),
 			Metadata:       thinkingMeta(o.lead.LastThinking),
 		})
 		return nil
+	}
+
+	// Option 2: dispatch any prose the Lead wrote before the task list as a
+	// social acknowledgement. This ensures the Boss always sees a human-readable
+	// response before the 🎯 assignment messages, even when work begins immediately.
+	if preamble := humanReadableDecomposed(decomposed); preamble != "" {
+		o.disp.DispatchSummary(models.Message{
+			ProjectID:      o.projectID,
+			ConversationID: o.convID,
+			Kind:           models.KindAgentMessage,
+			Tier:           models.TierSummary,
+			AgentID:        "lead",
+			Content:        preamble,
+			Metadata:       thinkingMeta(o.lead.LastThinking),
+		})
 	}
 
 	// Step 2: Persist tasks to SQLite.
@@ -455,7 +470,12 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	o.leadMu.Lock()
 	o.lead.OnRaw = o.channelRawFn("lead")
 	o.vram.NotifyLeadRunning()
-	summary, sumErr := o.lead.TurnStream(ctx, "All sub-tasks are complete. Provide a brief summary of what was accomplished for the Boss.", onChunk)
+	summary, sumErr := o.lead.TurnStream(ctx,
+		"All sub-tasks are complete. Write a brief, warm summary for the Boss — "+
+			"mention what was accomplished, where any key outputs ended up (e.g. files created), "+
+			"and offer a natural next-step or ask if they'd like to adjust anything. "+
+			"Sound like a colleague wrapping up a task, not a system log.",
+		onChunk)
 	o.lead.OnRaw = nil
 	o.leadMu.Unlock()
 	if sumErr == nil {
