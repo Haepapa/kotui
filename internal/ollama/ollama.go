@@ -94,7 +94,8 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResult, error)
 
 // ChatStream sends messages and returns a channel of StreamChunks.
 // The caller must drain the channel until Done=true or the channel closes.
-// Cancel ctx to abort the stream early.
+// Cancel ctx to abort the stream early. If the stream is cut by a context
+// deadline/cancellation, the final chunk has Done=true and Err set.
 func (c *Client) ChatStream(ctx context.Context, req ChatRequest) (<-chan StreamChunk, error) {
 	req.Stream = true
 	tctx, cancel := context.WithTimeout(ctx, c.timeout)
@@ -104,7 +105,7 @@ func (c *Client) ChatStream(ctx context.Context, req ChatRequest) (<-chan Stream
 		defer cancel()
 		defer close(ch)
 		if err := c.streamInto(tctx, req, ch); err != nil {
-			ch <- StreamChunk{Done: true}
+			ch <- StreamChunk{Done: true, Err: err}
 		}
 	}()
 	return ch, nil

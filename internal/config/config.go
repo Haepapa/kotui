@@ -174,6 +174,14 @@ func Load(path string) (Config, error) {
 		return cfg, fmt.Errorf("config: parse %s: %w", path, err)
 	}
 
+	// Migrate: old versions wrote request_timeout = "1m30s" (90s) as the
+	// default. Any timeout shorter than 5 minutes is too low for thinking
+	// models and is treated as a stale value — reset to the current default.
+	const minInferenceTimeout = 5 * time.Minute
+	if cfg.Ollama.RequestTimeout > 0 && cfg.Ollama.RequestTimeout < minInferenceTimeout {
+		cfg.Ollama.RequestTimeout = 10 * time.Minute
+	}
+
 	return cfg, nil
 }
 

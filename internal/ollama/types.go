@@ -85,6 +85,7 @@ type StreamChunk struct {
 	Content  string
 	Thinking string // native thinking content from think-capable models (Ollama ≥0.7)
 	Done     bool
+	Err      error // non-nil when the stream was cut by a context/network error
 }
 
 // ChatResult is the fully-accumulated result of a single chat turn.

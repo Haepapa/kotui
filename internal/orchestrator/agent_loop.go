@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -59,6 +60,18 @@ type LowConfidenceError struct {
 
 func (e *LowConfidenceError) Error() string {
 	return fmt.Sprintf("agent %s: low confidence (%.0f%%): %s", e.AgentID, e.Score*100, e.Reason)
+}
+
+// InferenceTimeoutError is returned when the model stream is cut by the
+// per-request timeout (context.DeadlineExceeded from ChatStream).
+type InferenceTimeoutError struct {
+	AgentID  string
+	Elapsed  float64 // seconds
+	TimeoutS float64 // configured timeout in seconds
+}
+
+func (e *InferenceTimeoutError) Error() string {
+	return fmt.Sprintf("agent %s: inference timed out after %.0fs (limit %.0fs)", e.AgentID, e.Elapsed, e.TimeoutS)
 }
 
 // newRunningAgent creates a RunningAgent from a spawned agent.Agent.
@@ -234,6 +247,7 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 		var sb strings.Builder
 		thinkingStarted := false
 		thinkingEnded := false
+		var streamErr error // set if the stream was cut by a context/network error
 		for chunk := range ch {
 			if chunk.Thinking != "" {
 				if !thinkingStarted {
@@ -262,6 +276,7 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 				}
 			}
 			if chunk.Done {
+				streamErr = chunk.Err
 				break
 			}
 		}
@@ -273,6 +288,18 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 			}
 		}
 		elapsed := time.Since(start)
+
+		// If the stream was cut by a deadline, surface a typed error so the
+		// caller can show a clear "inference timed out" message to the user.
+		if streamErr != nil && errors.Is(streamErr, context.DeadlineExceeded) {
+			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("⏱ inference timed out after %.0fs  agent=%s", elapsed.Seconds(), ra.AgentName))
+			return "", &InferenceTimeoutError{
+				AgentID:  ra.AgentID,
+				Elapsed:  elapsed.Seconds(),
+				TimeoutS: elapsed.Seconds(), // actual elapsed ≈ configured timeout
+			}
+		}
+
 		rawResponse := sb.String()
 		if rawResponse == "" {
 			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("✗ empty response after %.2fs  agent=%s", elapsed.Seconds(), ra.AgentName))

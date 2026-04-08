@@ -333,6 +333,18 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 		if errors.As(err, &escErr) {
 			return o.handleEscalation(ctx, escErr, command)
 		}
+		var toErr *InferenceTimeoutError
+		if errors.As(err, &toErr) {
+			o.disp.DispatchSummary(models.Message{
+				ProjectID:      o.projectID,
+				ConversationID: o.convID,
+				Kind:           models.KindSystemEvent,
+				Tier:           models.TierSummary,
+				AgentID:        "lead",
+				Content:        fmt.Sprintf("⏱ **Inference timed out** after %.0f seconds — the model was still thinking when the limit was reached.\n\nTo fix this: go to **Settings → Local Ollama → Inference Timeout** and increase the value (e.g. 600 for 10 minutes). The current timeout may be too short for this model.", toErr.Elapsed),
+			})
+			return nil
+		}
 		return fmt.Errorf("lead decomposition: %w", err)
 	}
 
@@ -624,6 +636,19 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 					Kind:           models.KindConsultation,
 					Tier:           models.TierSummary,
 					Content:        consultationContent(agentID, lcErr.Score, lcErr.Reason),
+				})
+				return nil
+			}
+			// Inference timeout: show a helpful message rather than silently failing.
+			var toErr *InferenceTimeoutError
+			if errors.As(err, &toErr) {
+				o.disp.Dispatch(models.Message{
+					ProjectID:      o.projectID,
+					ConversationID: convID,
+					AgentID:        agentID,
+					Kind:           models.KindSystemEvent,
+					Tier:           models.TierSummary,
+					Content:        fmt.Sprintf("⏱ **Inference timed out** after %.0f seconds — the model was still thinking when the limit was reached.\n\nTo fix this: go to **Settings → Local Ollama → Inference Timeout** and increase the value (e.g. 600 for 10 minutes).", toErr.Elapsed),
 				})
 				return nil
 			}
