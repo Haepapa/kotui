@@ -1570,6 +1570,37 @@ func (s *WarRoomService) RenameSandboxFile(ctx context.Context, relPath, newName
 	return nil
 }
 
+// ExportActivityLog writes a formatted activity log into the agent workspace at
+// sandbox/logs/{label}_{yyyymmdd_hhmmss}.log and returns the relative path.
+// label should be the channel or agent name (sanitised to remove path separators).
+func (s *WarRoomService) ExportActivityLog(ctx context.Context, label, content string) (string, error) {
+	// Sanitise label: replace any character that is not alphanumeric, dash, or
+	// underscore with an underscore so it is safe as a filename component.
+	safe := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, label)
+	if safe == "" {
+		safe = "activity"
+	}
+
+	ts := time.Now().Format("20060102_150405")
+	relPath := filepath.Join("logs", safe+"_"+ts+".log")
+
+	root := filepath.Join(s.cfg.App.DataDir, "sandbox")
+	abs := filepath.Join(root, relPath)
+
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return "", fmt.Errorf("export log: mkdir: %w", err)
+	}
+	if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("export log: write: %w", err)
+	}
+	return relPath, nil
+}
+
 // RevealSandboxFile opens the OS file explorer and selects/highlights the file.
 // On macOS this opens Finder; on Linux it opens the parent directory in the
 // default file manager; on Windows it opens Explorer with the file selected.

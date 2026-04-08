@@ -1,13 +1,17 @@
 <script lang="ts">
   import type { KotuiMessage } from '../lib/types';
+  import { exportActivityLog } from '../lib/warroom';
 
   interface Props {
     messages: KotuiMessage[];
+    label: string; // channel or agent name — used in the exported filename
   }
 
-  let { messages }: Props = $props();
+  let { messages, label }: Props = $props();
 
   let consoleEl = $state<HTMLDivElement | null>(null);
+  let exportStatus = $state<'idle' | 'exporting' | 'done' | 'error'>('idle');
+  let exportMsg = $state('');
 
   $effect(() => {
     if (messages.length && consoleEl) {
@@ -45,17 +49,59 @@
   }
 
   function draftPreview(content: string): string {
-    // First non-empty line, truncated to 60 chars
     const first = content.split('\n').find(l => l.trim()) ?? '';
     return first.length > 60 ? first.slice(0, 60) + '…' : first;
+  }
+
+  function formatLogLine(msg: KotuiMessage): string {
+    const t = msg.created_at ? new Date(msg.created_at).toISOString() : '';
+    const agent = msg.agent_id ? ` [${msg.agent_id}]` : '';
+    return `${t} [${msg.kind}]${agent}\n${msg.content}\n`;
+  }
+
+  async function handleExport() {
+    if (exportStatus === 'exporting') return;
+    exportStatus = 'exporting';
+    exportMsg = '';
+    try {
+      const lines = messages.map(formatLogLine).join('\n---\n\n');
+      const header = `# Kōtui Activity Log\n# Channel/Agent: ${label}\n# Exported: ${new Date().toISOString()}\n# Entries: ${messages.length}\n\n`;
+      const relPath = await exportActivityLog(label, header + lines);
+      exportMsg = relPath;
+      exportStatus = 'done';
+      setTimeout(() => { exportStatus = 'idle'; exportMsg = ''; }, 4000);
+    } catch (e) {
+      exportMsg = e instanceof Error ? e.message : String(e);
+      exportStatus = 'error';
+      setTimeout(() => { exportStatus = 'idle'; exportMsg = ''; }, 5000);
+    }
   }
 </script>
 
 <aside class="engine-room">
   <div class="er-header">
     <span class="er-title">Agent Activity</span>
-    <span class="er-count">{messages.length}</span>
+    <div class="er-header-right">
+      <span class="er-count">{messages.length}</span>
+      <button
+        class="er-export-btn"
+        title="Export logs to workspace files"
+        onclick={handleExport}
+        disabled={exportStatus === 'exporting' || messages.length === 0}
+      >
+        {#if exportStatus === 'exporting'}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        {:else}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        {/if}
+      </button>
+    </div>
   </div>
+  {#if exportStatus === 'done'}
+    <div class="er-toast er-toast-ok">✓ Saved → {exportMsg}</div>
+  {:else if exportStatus === 'error'}
+    <div class="er-toast er-toast-err">⚠ {exportMsg}</div>
+  {/if}
   <div class="er-console" bind:this={consoleEl}>
     {#each messages as msg (msg.id || msg.created_at)}
       <div class="log-line">
@@ -105,6 +151,11 @@
     border-bottom: 1px solid var(--border-console);
     flex-shrink: 0;
   }
+  .er-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
   .er-title { font-size: 0.8125rem; color: var(--text-secondary); font-weight: 600; letter-spacing: 0.04em; }
   .er-count {
     font-size: 0.75rem;
@@ -113,6 +164,33 @@
     border-radius: 10px;
     padding: 0.1rem 0.4rem;
   }
+  .er-export-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid var(--border-console);
+    border-radius: 5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 3px 5px;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+    line-height: 1;
+  }
+  .er-export-btn:hover:not(:disabled) { color: var(--text-secondary); border-color: var(--text-muted); background: var(--bg-hover); }
+  .er-export-btn:disabled { opacity: 0.4; cursor: default; }
+  .spin { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .er-toast {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.75rem;
+    border-bottom: 1px solid var(--border-console);
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    word-break: break-all;
+  }
+  .er-toast-ok { color: #4ade80; background: rgba(74,222,128,0.07); }
+  .er-toast-err { color: #f87171; background: rgba(248,113,113,0.07); }
   .er-console {
     flex: 1;
     overflow-y: auto;

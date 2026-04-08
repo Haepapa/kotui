@@ -189,14 +189,14 @@
           dmAgentID={wr.activeDMAgentID}
         />
         {#if wr.viewMode === 'dev'}
-          <EngineRoom messages={dmEngineMsgs} />
+          <EngineRoom messages={dmEngineMsgs} label={agentName(wr.activeDMAgentID) || 'dm'} />
         {/if}
       {:else}
         {#key wr.activeConvID}
           <ChatArea messages={visibleMsgs} mode={wr.viewMode} isBusy={wr.isBusy} heartbeat={wr.heartbeat} queueState={wr.queueState} streamContent={channelStream} />
         {/key}
         {#if wr.viewMode === 'dev'}
-          <EngineRoom messages={engineMsgs} />
+          <EngineRoom messages={engineMsgs} label={activeProject?.name || 'channel'} />
         {/if}
       {/if}
     </div>

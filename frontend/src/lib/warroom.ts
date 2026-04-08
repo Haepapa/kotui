@@ -37,6 +37,7 @@ import {
   ReadSandboxFile as _ReadSandboxFile,
   DeleteSandboxFile as _DeleteSandboxFile,
   RenameSandboxFile as _RenameSandboxFile,
+  ExportActivityLog as _ExportActivityLog,
   RevealSandboxFile as _RevealSandboxFile,
 } from '../../bindings/github.com/haepapa/kotui/internal/warroom/warroomservice';
 import type { BrainFiles as _BrainFiles, FirstRunResult as _FirstRunResult } from '../../bindings/github.com/haepapa/kotui/internal/warroom/models';
@@ -237,4 +238,8 @@ export function renameSandboxFile(relPath: string, newName: string): Promise<voi
 
 export function revealSandboxFile(relPath: string): Promise<void> {
   return _RevealSandboxFile(relPath) as Promise<void>;
+}
+
+export function exportActivityLog(label: string, content: string): Promise<string> {
+  return _ExportActivityLog(label, content) as Promise<string>;
 }

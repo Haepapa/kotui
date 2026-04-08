@@ -88,6 +88,15 @@ export function EmitQueueState(p0: number, p1: number, p2: number, p3: number, a
 }
 
 /**
+ * ExportActivityLog writes a formatted activity log into the agent workspace at
+ * sandbox/logs/{label}_{yyyymmdd_hhmmss}.log and returns the relative path.
+ * label should be the channel or agent name (sanitised to remove path separators).
+ */
+export function ExportActivityLog(label: string, content: string): $CancellablePromise<string> {
+    return $Call.ByID(2776391786, label, content);
+}
+
+/**
  * GetActiveConversation returns the conversation ID for the active project.
  */
 export function GetActiveConversation(): $CancellablePromise<string> {
