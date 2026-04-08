@@ -294,6 +294,8 @@ export function ResetAppData(): $CancellablePromise<void> {
  * RevealSandboxFile opens the OS file explorer and selects/highlights the file.
  * On macOS this opens Finder; on Linux it opens the parent directory in the
  * default file manager; on Windows it opens Explorer with the file selected.
+ * Note: a background context is used so the launched process is not killed
+ * when the Wails request context is cancelled on method return.
  */
 export function RevealSandboxFile(relPath: string): $CancellablePromise<void> {
     return $Call.ByID(820944791, relPath);

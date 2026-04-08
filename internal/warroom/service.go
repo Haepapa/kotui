@@ -1604,6 +1604,8 @@ func (s *WarRoomService) ExportActivityLog(ctx context.Context, label, content s
 // RevealSandboxFile opens the OS file explorer and selects/highlights the file.
 // On macOS this opens Finder; on Linux it opens the parent directory in the
 // default file manager; on Windows it opens Explorer with the file selected.
+// Note: a background context is used so the launched process is not killed
+// when the Wails request context is cancelled on method return.
 func (s *WarRoomService) RevealSandboxFile(ctx context.Context, relPath string) error {
 	_, abs, err := s.sandboxAbs(relPath)
 	if err != nil {
@@ -1615,12 +1617,12 @@ func (s *WarRoomService) RevealSandboxFile(ctx context.Context, relPath string) 
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.CommandContext(ctx, "open", "-R", abs)
+		cmd = exec.Command("open", "-R", abs)
 	case "windows":
-		cmd = exec.CommandContext(ctx, "explorer", "/select,"+abs)
+		cmd = exec.Command("explorer", "/select,"+abs)
 	default:
 		// Linux: open the parent directory in the default file manager.
-		cmd = exec.CommandContext(ctx, "xdg-open", filepath.Dir(abs))
+		cmd = exec.Command("xdg-open", filepath.Dir(abs))
 	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("reveal sandbox file: %w", err)

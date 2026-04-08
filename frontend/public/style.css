@@ -6,8 +6,8 @@
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  user-select: none;
-  -webkit-user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
   /* Design tokens — dark (default) */
   --titlebar-h: 44px;
   --bg-app: #0d0f14;
@@ -137,20 +137,16 @@ button {
   justify-content: center;
 }
 
-/* Allow text selection only where it makes sense: chat message content,
-   the company identity editor, input/textarea fields, and activity log entries. */
-.bubble-text,
-.think-body,
-.send-error,
-.milestone-text,
-.system-event-text,
-.identity-textarea,
-.log-content,
-.log-time,
-.log-kind,
-.log-agent,
-input,
-textarea {
+/* Buttons and interactive chrome: prevent accidental text selection.
+   All other content (chat bubbles, file viewer, logs, panels) is selectable
+   by the global :root default above. */
+button, [role="button"], [role="tab"], [role="menuitem"] {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Inputs and textareas retain text cursor */
+input, textarea {
   user-select: text;
   -webkit-user-select: text;
   cursor: text;

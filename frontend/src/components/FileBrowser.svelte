@@ -91,7 +91,7 @@
     try {
       await revealSandboxFile(entry.path);
     } catch (e: any) {
-      alert(`Could not open in Finder: ${e?.message ?? e}`);
+      alert(`Could not open location: ${e?.message ?? e}`);
     }
   }
 
@@ -151,7 +151,7 @@
               <span class="dir-name">{entry.name}/</span>
               {#if hoveredPath === entry.path}
                 <div class="row-actions">
-                  <button class="row-action-btn" title="Show in Finder" onclick={() => handleReveal(entry)}>
+                  <button class="row-action-btn" title="Open location" onclick={() => handleReveal(entry)}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                     </svg>
@@ -200,7 +200,7 @@
                 </button>
                 {#if hoveredPath === entry.path}
                   <div class="row-actions">
-                    <button class="row-action-btn" title="Show in Finder" onclick={() => handleReveal(entry)}>
+                    <button class="row-action-btn" title="Open location" onclick={() => handleReveal(entry)}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                       </svg>
@@ -241,11 +241,11 @@
           <span class="viewer-info">{formatSize(selectedFile.size)} · {formatDate(selectedFile.mod_time)}</span>
         </div>
         <div class="viewer-header-actions">
-          <button class="viewer-action-btn" title="Show in Finder" onclick={() => handleReveal(selectedFile!)}>
+          <button class="viewer-action-btn" title="Open location" onclick={() => handleReveal(selectedFile!)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
-            Show in Finder
+            Open Location
           </button>
           <button class="viewer-action-btn" title="Rename" onclick={() => startRename(selectedFile!)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -560,6 +560,9 @@
     color: var(--text-primary);
     white-space: pre;
     tab-size: 2;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
 
   /* ── Delete confirmation modal ── */
