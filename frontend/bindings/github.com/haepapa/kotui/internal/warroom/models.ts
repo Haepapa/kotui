@@ -232,6 +232,11 @@ export class UIConfig {
     "embedder_model": string;
     "senior_model": string;
     "senior_endpoint": string;
+
+    /**
+     * seconds; 0 = same as local
+     */
+    "senior_inference_timeout": number;
     "senior_ssh_host": string;
     "senior_ssh_cmd": string;
     "timezone": string;
@@ -284,6 +289,9 @@ export class UIConfig {
         }
         if (!("senior_endpoint" in $$source)) {
             this["senior_endpoint"] = "";
+        }
+        if (!("senior_inference_timeout" in $$source)) {
+            this["senior_inference_timeout"] = 0;
         }
         if (!("senior_ssh_host" in $$source)) {
             this["senior_ssh_host"] = "";

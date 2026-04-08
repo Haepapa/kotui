@@ -35,9 +35,19 @@
     return msg.kind === 'system_event' && msg.content.startsWith('💭 thinking:');
   }
 
+  function isDraft(msg: KotuiMessage): boolean {
+    return msg.kind === 'draft';
+  }
+
   function thinkingBody(content: string): string {
     const nl = content.indexOf('\n');
     return nl >= 0 ? content.slice(nl + 1).trim() : content;
+  }
+
+  function draftPreview(content: string): string {
+    // First non-empty line, truncated to 60 chars
+    const first = content.split('\n').find(l => l.trim()) ?? '';
+    return first.length > 60 ? first.slice(0, 60) + '…' : first;
   }
 </script>
 
@@ -60,6 +70,11 @@
           <details class="think-details">
             <summary class="think-summary-er">💭 thinking…</summary>
             <div class="log-content think-content">{thinkingBody(msg.content)}</div>
+          </details>
+        {:else if isDraft(msg)}
+          <details class="draft-details">
+            <summary class="draft-summary-er">📝 draft — {draftPreview(msg.content)}</summary>
+            <div class="log-content draft-content">{msg.content}</div>
           </details>
         {:else}
           <div class="log-content">{msg.content}</div>
@@ -158,6 +173,38 @@
     border-left: 2px solid rgba(251,146,60,0.3);
     padding-left: 0.375rem;
     color: rgba(251,146,60,0.75);
+  }
+
+  /* Collapsible draft entries */
+  .draft-details {
+    padding-left: 0.25rem;
+  }
+  .draft-summary-er {
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 0.7rem;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .draft-summary-er::before {
+    content: '▶';
+    font-size: 0.55rem;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  .draft-details[open] .draft-summary-er::before {
+    transform: rotate(90deg);
+  }
+  .draft-summary-er::-webkit-details-marker { display: none; }
+  .draft-content {
+    margin-top: 0.25rem;
+    white-space: pre-wrap;
+    border-left: 2px solid rgba(148,163,184,0.3);
+    padding-left: 0.375rem;
+    color: rgba(148,163,184,0.8);
   }
 </style>
 

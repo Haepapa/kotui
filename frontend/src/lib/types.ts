@@ -79,6 +79,7 @@ export interface UIConfig {
   embedder_model: string;
   senior_model: string;
   senior_endpoint: string;
+  senior_inference_timeout: number; // seconds; 0 = same as local
   senior_ssh_host: string;
   senior_ssh_cmd: string;
   timezone: string;

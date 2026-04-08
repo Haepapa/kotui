@@ -82,6 +82,9 @@ type SeniorConsultantConfig struct {
 	// Endpoint is the Ollama API URL for the Senior Consultant.
 	// Leave empty to use the same Ollama instance as the Lead.
 	Endpoint string `toml:"endpoint"`
+	// RequestTimeout is the per-request timeout for the Senior Consultant.
+	// Leave zero to use the same timeout as the local Ollama config.
+	RequestTimeout time.Duration `toml:"request_timeout"`
 	// SSHHost is an optional SSH alias (from ~/.ssh/config) used to wake
 	// the remote machine. Leave empty to disable wake-on-demand.
 	SSHHost string `toml:"ssh_host"`

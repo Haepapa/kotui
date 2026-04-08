@@ -64,10 +64,11 @@ type UIConfig struct {
 	LeadModel         string `json:"lead_model"`
 	WorkerModel      string `json:"worker_model"`
 	EmbedderModel    string `json:"embedder_model"`
-	SeniorModel      string `json:"senior_model"`
-	SeniorEndpoint   string `json:"senior_endpoint"`
-	SeniorSSHHost    string `json:"senior_ssh_host"`
-	SeniorSSHCmd     string `json:"senior_ssh_cmd"`
+	SeniorModel             string `json:"senior_model"`
+	SeniorEndpoint          string `json:"senior_endpoint"`
+	SeniorInferenceTimeout  int    `json:"senior_inference_timeout"` // seconds; 0 = same as local
+	SeniorSSHHost           string `json:"senior_ssh_host"`
+	SeniorSSHCmd            string `json:"senior_ssh_cmd"`
 	Timezone         string `json:"timezone"`
 	// Telegram
 	TelegramBotToken string `json:"telegram_bot_token"`
@@ -810,10 +811,11 @@ func (s *WarRoomService) GetConfig(ctx context.Context) (UIConfig, error) {
 		LeadModel:           s.cfg.Models.Lead,
 		WorkerModel:         s.cfg.Models.Specialist,
 		EmbedderModel:       s.cfg.Models.Embedder,
-		SeniorModel:         s.cfg.SeniorConsultant.Model,
-		SeniorEndpoint:      s.cfg.SeniorConsultant.Endpoint,
-		SeniorSSHHost:       s.cfg.SeniorConsultant.SSHHost,
-		SeniorSSHCmd:        s.cfg.SeniorConsultant.SSHStartCmd,
+		SeniorModel:             s.cfg.SeniorConsultant.Model,
+		SeniorEndpoint:          s.cfg.SeniorConsultant.Endpoint,
+		SeniorInferenceTimeout:  int(s.cfg.SeniorConsultant.RequestTimeout.Seconds()),
+		SeniorSSHHost:           s.cfg.SeniorConsultant.SSHHost,
+		SeniorSSHCmd:            s.cfg.SeniorConsultant.SSHStartCmd,
 		Timezone:            s.cfg.App.Timezone,
 		TelegramBotToken:    s.cfg.Relay.TelegramBotToken,
 		TelegramChatID:      s.cfg.Relay.TelegramChatID,
@@ -841,6 +843,9 @@ func (s *WarRoomService) SaveConfig(ctx context.Context, uiCfg UIConfig) error {
 	s.cfg.Models.Embedder = uiCfg.EmbedderModel
 	s.cfg.SeniorConsultant.Model = uiCfg.SeniorModel
 	s.cfg.SeniorConsultant.Endpoint = uiCfg.SeniorEndpoint
+	if uiCfg.SeniorInferenceTimeout > 0 {
+		s.cfg.SeniorConsultant.RequestTimeout = time.Duration(uiCfg.SeniorInferenceTimeout) * time.Second
+	}
 	s.cfg.SeniorConsultant.SSHHost = uiCfg.SeniorSSHHost
 	s.cfg.SeniorConsultant.SSHStartCmd = uiCfg.SeniorSSHCmd
 	s.cfg.App.Timezone = uiCfg.Timezone
@@ -1181,6 +1186,41 @@ func (s *WarRoomService) EmitBrainUpdate(ctx context.Context, agentID, file, sum
 	if file == "persona" {
 		s.emitAgentsChanged(ctx)
 	}
+}
+
+// GetAgentJournalFiles returns a sorted list of journal filenames for the given agent.
+// Journal files live in {dataDir}/agents/{agentID}/journal/. Returns an empty slice
+// (not an error) when no journal entries exist yet.
+func (s *WarRoomService) GetAgentJournalFiles(ctx context.Context, agentID string) ([]string, error) {
+	paths := agent.AgentPaths(s.cfg.App.DataDir, agentID)
+	entries, err := os.ReadDir(paths.JournalDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("read journal dir: %w", err)
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			files = append(files, e.Name())
+		}
+	}
+	return files, nil
+}
+
+// GetAgentJournalFile returns the content of a single journal file.
+// filename must be a plain filename (no path separators) to prevent path traversal.
+func (s *WarRoomService) GetAgentJournalFile(ctx context.Context, agentID, filename string) (string, error) {
+	if strings.ContainsAny(filename, "/\\") {
+		return "", fmt.Errorf("invalid filename")
+	}
+	paths := agent.AgentPaths(s.cfg.App.DataDir, agentID)
+	data, err := os.ReadFile(filepath.Join(paths.JournalDir, filename))
+	if err != nil {
+		return "", fmt.Errorf("read journal file: %w", err)
+	}
+	return string(data), nil
 }
 
 // EmitQueueState fires a kotui:queue_state event so the frontend can display

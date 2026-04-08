@@ -8,6 +8,8 @@ import {
   DecideApproval as _DecideApproval,
   GetActiveConversation as _GetActiveConversation,
   GetAgentBrainFiles as _GetAgentBrainFiles,
+  GetAgentJournalFiles as _GetAgentJournalFiles,
+  GetAgentJournalFile as _GetAgentJournalFile,
   GetAgents as _GetAgents,
   GetCompanyIdentity as _GetCompanyIdentity,
   GetConfig as _GetConfig,
@@ -147,6 +149,14 @@ export type BrainFiles = { soul: string; persona: string; skills: string };
 
 export function getAgentBrainFiles(agentID: string): Promise<BrainFiles> {
   return _GetAgentBrainFiles(agentID) as Promise<BrainFiles>;
+}
+
+export function getAgentJournalFiles(agentID: string): Promise<string[]> {
+  return _GetAgentJournalFiles(agentID) as Promise<string[]>;
+}
+
+export function getAgentJournalFile(agentID: string, filename: string): Promise<string> {
+  return _GetAgentJournalFile(agentID, filename) as Promise<string>;
 }
 
 export function saveAgentBrainFile(agentID: string, fileKey: string, content: string, summary: string): Promise<void> {

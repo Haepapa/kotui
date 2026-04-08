@@ -69,6 +69,9 @@
     line-height: 1.6;
     color: inherit;
     min-width: 0;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
 
   /* Remove top margin from the first block and bottom from the last */

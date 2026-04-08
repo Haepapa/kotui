@@ -12,6 +12,7 @@
     embedder_model: '',
     senior_model: '',
     senior_endpoint: '',
+    senior_inference_timeout: 0,
     senior_ssh_host: '',
     senior_ssh_cmd: '',
     timezone: '',
@@ -371,6 +372,14 @@
           <button class="icon-btn" onclick={() => refreshModels(remote, cfg.senior_endpoint)} title="Refresh" disabled={remote.loading}>
             {remote.loading ? '…' : '↻'}
           </button>
+        </div>
+      </label>
+
+      <label>
+        <span>Inference Timeout (seconds)</span>
+        <div class="input-row">
+          <input type="number" min="30" max="3600" step="30" bind:value={cfg.senior_inference_timeout} placeholder="0 (use local setting)" style="max-width: 120px" />
+          <span class="field-hint">0 = same as local. Increase for slow remote hardware.</span>
         </div>
       </label>
 

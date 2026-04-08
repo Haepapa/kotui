@@ -109,11 +109,30 @@ export function GetAgentBrainFiles(agentID: string): $CancellablePromise<$models
 }
 
 /**
+ * GetAgentJournalFile returns the content of a single journal file.
+ * filename must be a plain filename (no path separators) to prevent path traversal.
+ */
+export function GetAgentJournalFile(agentID: string, filename: string): $CancellablePromise<string> {
+    return $Call.ByID(1484584703, agentID, filename);
+}
+
+/**
+ * GetAgentJournalFiles returns a sorted list of journal filenames for the given agent.
+ * Journal files live in {dataDir}/agents/{agentID}/journal/. Returns an empty slice
+ * (not an error) when no journal entries exist yet.
+ */
+export function GetAgentJournalFiles(agentID: string): $CancellablePromise<string[]> {
+    return $Call.ByID(3635945060, agentID).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
+/**
  * GetAgents returns the current agent roster for the active project.
  */
 export function GetAgents(): $CancellablePromise<$models.AgentInfo[]> {
     return $Call.ByID(1767502295).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
@@ -127,7 +146,7 @@ export function GetCompanyIdentity(): $CancellablePromise<string> {
 
 export function GetConfig(): $CancellablePromise<$models.UIConfig> {
     return $Call.ByID(3551944047).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -144,7 +163,7 @@ export function GetHandbook(): $CancellablePromise<string> {
  */
 export function GetHeartbeat(): $CancellablePromise<$models.HeartbeatState> {
     return $Call.ByID(3900598671).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -154,7 +173,7 @@ export function GetHeartbeat(): $CancellablePromise<$models.HeartbeatState> {
  */
 export function GetMessages(conversationID: string, limit: number): $CancellablePromise<models$0.Message[]> {
     return $Call.ByID(2715906237, conversationID, limit).then(($result: any) => {
-        return $$createType8($result);
+        return $$createType9($result);
     });
 }
 
@@ -174,7 +193,7 @@ export function GetOrCreateDirectConversation(agentID: string): $CancellableProm
  */
 export function GetPendingApprovals(): $CancellablePromise<models$0.Approval[]> {
     return $Call.ByID(2250532500).then(($result: any) => {
-        return $$createType10($result);
+        return $$createType11($result);
     });
 }
 
@@ -183,7 +202,7 @@ export function GetPendingApprovals(): $CancellablePromise<models$0.Approval[]> 
  */
 export function GetProjects(): $CancellablePromise<models$0.Project[]> {
     return $Call.ByID(634004591).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType12($result);
     });
 }
 
@@ -195,7 +214,7 @@ export function GetProjects(): $CancellablePromise<models$0.Project[]> {
  */
 export function InitFirstRun(): $CancellablePromise<$models.FirstRunResult> {
     return $Call.ByID(787017174).then(($result: any) => {
-        return $$createType12($result);
+        return $$createType13($result);
     });
 }
 
@@ -206,7 +225,7 @@ export function InitFirstRun(): $CancellablePromise<$models.FirstRunResult> {
  */
 export function ListOllamaModels(endpoint: string): $CancellablePromise<string[]> {
     return $Call.ByID(637971051, endpoint).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType3($result);
     });
 }
 
@@ -356,16 +375,16 @@ export function SwitchProject(id: string): $CancellablePromise<void> {
 const $$createType0 = models$0.Project.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
 const $$createType2 = $models.BrainFiles.createFrom;
-const $$createType3 = $models.AgentInfo.createFrom;
-const $$createType4 = $Create.Array($$createType3);
-const $$createType5 = $models.UIConfig.createFrom;
-const $$createType6 = $models.HeartbeatState.createFrom;
-const $$createType7 = models$0.Message.createFrom;
-const $$createType8 = $Create.Array($$createType7);
-const $$createType9 = models$0.Approval.createFrom;
-const $$createType10 = $Create.Array($$createType9);
-const $$createType11 = $Create.Array($$createType0);
-const $$createType12 = $models.FirstRunResult.createFrom;
-const $$createType13 = $Create.Array($Create.Any);
+const $$createType3 = $Create.Array($Create.Any);
+const $$createType4 = $models.AgentInfo.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $models.UIConfig.createFrom;
+const $$createType7 = $models.HeartbeatState.createFrom;
+const $$createType8 = models$0.Message.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = models$0.Approval.createFrom;
+const $$createType11 = $Create.Array($$createType10);
+const $$createType12 = $Create.Array($$createType0);
+const $$createType13 = $models.FirstRunResult.createFrom;
 const $$createType14 = $models.FileEntry.createFrom;
 const $$createType15 = $Create.Array($$createType14);
