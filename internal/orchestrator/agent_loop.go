@@ -29,6 +29,12 @@ type RunningAgent struct {
 	history   []ollama.ChatMessage
 	sysPrompt string
 
+	// pendingHistoryEntry, if set, overrides what gets stored in history for the
+	// NEXT TurnStream call. Use InjectHistoryEntry to set it. This lets callers
+	// store the raw user message in history while sending a richer augmented
+	// version (e.g. decomposePrompt / dmTurnPrompt) to the model for inference.
+	pendingHistoryEntry *string
+
 	// OnRaw, if non-nil, receives raw activity events (API calls, tool calls,
 	// tool results, errors). Callers set this before calling Turn/TurnStream to
 	// route log entries to the appropriate Dispatcher channel.
@@ -37,6 +43,15 @@ type RunningAgent struct {
 	// LastThinking holds the thinking content from the most recent Turn/TurnStream
 	// call. Set after extractThinkBlocks; empty when the model produced no thinking.
 	LastThinking string
+}
+
+// InjectHistoryEntry sets the content that will be stored in the history user
+// message for the NEXT TurnStream call. The injected content (raw user message)
+// replaces what would otherwise be stored — the augmented/wrapped inference
+// content. This prevents prompt-engineering wrappers (decomposePrompt,
+// dmTurnPrompt) from polluting the history and confusing follow-up turns.
+func (ra *RunningAgent) InjectHistoryEntry(raw string) {
+	ra.pendingHistoryEntry = &raw
 }
 
 // rawLog calls OnRaw if set. Safe to call when OnRaw is nil.
@@ -218,9 +233,15 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 // so callers can show a live typing animation or pipe output to a frontend.
 // Tool-loop iterations are also streamed. onChunk may be nil.
 func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onChunk func(string)) (string, error) {
+	// Store the raw content in history (not the augmented inference content).
+	historyContent := userContent
+	if ra.pendingHistoryEntry != nil {
+		historyContent = *ra.pendingHistoryEntry
+		ra.pendingHistoryEntry = nil
+	}
 	ra.history = append(ra.history, ollama.ChatMessage{
 		Role:    "user",
-		Content: userContent,
+		Content: historyContent,
 	})
 
 	for loop := 0; loop < maxToolLoops; loop++ {

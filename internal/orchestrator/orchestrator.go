@@ -308,13 +308,25 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	// already exists) send just the raw command — the model already has the
 	// instructions in its history and wrapping again makes each follow-up look
 	// like a new standalone task, causing it to forget prior context.
+	//
+	// IMPORTANT: always call InjectHistoryEntry(command) before TurnStream so
+	// the raw user message (not the augmented prompt wrapper) is stored in
+	// history. This keeps the history readable as a natural conversation,
+	// preventing the model from being confused by decomposePrompt boilerplate
+	// on follow-up turns.
 	hasHistory := len(o.lead.History()) > 0
 	var augmented string
 	if hasHistory {
-		augmented = fmt.Sprintf("Boss: %s\n\n(This is a follow-up to the ongoing conversation above. If it answers your clarification question, proceed with task decomposition now. Before any tool call, output a confidence signal on its own line.)", strings.TrimSpace(command))
+		// The model has the full conversation in history. Deliver the raw follow-up
+		// and tell it to proceed once context is clear — no need to re-explain the
+		// entire framework.
+		augmented = fmt.Sprintf("Boss: %s\n\n(You have the full conversation above. If this message provides the answer or context you needed, proceed with the original request now — decompose into tasks and get the team started. If still unclear, ask one final focused question. Before any tool call, output a confidence signal on its own line.)", strings.TrimSpace(command))
 	} else {
 		augmented = decomposePrompt(command)
 	}
+	// Store the raw command in history (not the augmented wrapper) so that
+	// follow-up turns see a natural conversation, not prompt-engineering boilerplate.
+	o.lead.InjectHistoryEntry(command)
 	if o.memory != nil && o.projectID != "" {
 		entries, err := o.memory.Recall(ctx, "lead", o.projectID, command, 5)
 		if err == nil && len(entries) > 0 {
@@ -596,6 +608,10 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 	// Wrap with structured pre-flight reasoning so the agent considers
 	// identity changes and tool calls before composing its reply.
 	augmented = dmTurnPrompt(augmented)
+
+	// Store the raw user message in history (not the dmTurnPrompt wrapper) so
+	// subsequent turns see a natural conversation rather than repeated boilerplate.
+	ra.InjectHistoryEntry(message)
 
 	// Notify the user if they'll have to wait — check state before enqueuing
 	// so the message appears immediately rather than after the current call ends.
