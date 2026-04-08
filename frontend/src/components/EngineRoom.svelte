@@ -25,6 +25,7 @@
       case 'tool_result': return '#a78bfa';
       case 'draft': return '#94a3b8';
       case 'system_event': return '#fb923c';
+      case 'boss_command': return '#38bdf8';
       default: return '#64748b';
     }
   }
@@ -43,6 +44,10 @@
     return msg.kind === 'draft';
   }
 
+  function isBossCommand(msg: KotuiMessage): boolean {
+    return msg.kind === 'boss_command';
+  }
+
   function thinkingBody(content: string): string {
     const nl = content.indexOf('\n');
     return nl >= 0 ? content.slice(nl + 1).trim() : content;
@@ -51,6 +56,11 @@
   function draftPreview(content: string): string {
     const first = content.split('\n').find(l => l.trim()) ?? '';
     return first.length > 60 ? first.slice(0, 60) + '…' : first;
+  }
+
+  function bossPreview(content: string): string {
+    const first = content.split('\n').find(l => l.trim()) ?? '';
+    return first.length > 50 ? first.slice(0, 50) + '…' : first;
   }
 
   function formatLogLine(msg: KotuiMessage): string {
@@ -121,6 +131,11 @@
           <details class="draft-details">
             <summary class="draft-summary-er">📝 draft — {draftPreview(msg.content)}</summary>
             <div class="log-content draft-content">{msg.content}</div>
+          </details>
+        {:else if isBossCommand(msg)}
+          <details class="boss-details">
+            <summary class="boss-summary-er">👤 user — {bossPreview(msg.content)}</summary>
+            <div class="log-content boss-content">{msg.content}</div>
           </details>
         {:else}
           <div class="log-content">{msg.content}</div>
@@ -251,6 +266,8 @@
     border-left: 2px solid rgba(251,146,60,0.3);
     padding-left: 0.375rem;
     color: rgba(251,146,60,0.75);
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   /* Collapsible draft entries */
@@ -283,6 +300,42 @@
     border-left: 2px solid rgba(148,163,184,0.3);
     padding-left: 0.375rem;
     color: rgba(148,163,184,0.8);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* Collapsible user/boss message entries */
+  .boss-details {
+    padding-left: 0.25rem;
+  }
+  .boss-summary-er {
+    cursor: pointer;
+    color: #38bdf8;
+    font-size: 0.7rem;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+  .boss-summary-er::before {
+    content: '▶';
+    font-size: 0.55rem;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  .boss-details[open] .boss-summary-er::before {
+    transform: rotate(90deg);
+  }
+  .boss-summary-er::-webkit-details-marker { display: none; }
+  .boss-content {
+    margin-top: 0.25rem;
+    white-space: pre-wrap;
+    border-left: 2px solid rgba(56,189,248,0.3);
+    padding-left: 0.375rem;
+    color: rgba(56,189,248,0.85);
+    user-select: text;
+    -webkit-user-select: text;
   }
 </style>
 

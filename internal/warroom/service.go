@@ -1311,6 +1311,10 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 		_ = s.db.SaveMessage(ctx, userMsg)
 	}
 	s.app.Event.Emit("kotui:message", userMsg)
+	// Also emit as TierRaw so the Engine Room activity log captures user messages.
+	rawUserMsg := userMsg
+	rawUserMsg.Tier = models.TierRaw
+	s.app.Event.Emit("kotui:message", rawUserMsg)
 
 	// Index the message in memory for later recall.
 	if s.mem != nil {

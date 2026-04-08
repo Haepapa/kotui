@@ -290,6 +290,15 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 		Tier:           models.TierSummary,
 		Content:   command,
 	})
+	// Also route to the Engine Room (TierRaw) so the activity log shows user messages.
+	o.disp.DispatchRaw(models.Message{
+		ProjectID:      o.projectID,
+		ConversationID: o.convID,
+		AgentID:        "boss",
+		Kind:           models.KindBossCommand,
+		Tier:           models.TierRaw,
+		Content:        command,
+	})
 
 	o.log.Info("boss command received", "command", truncate(command, 80))
 
