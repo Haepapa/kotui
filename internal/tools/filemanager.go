@@ -22,11 +22,15 @@ var fileManagerSchema = json.RawMessage(`{
 	"properties": {
 		"operation": {
 			"type": "string",
-			"description": "tree | stat | find"
+			"description": "tree | stat | find | read | write | delete"
 		},
 		"path": {
 			"type": "string",
-			"description": "Root path for tree/stat, or search root for find. Defaults to workspace root."
+			"description": "File or directory path. For tree/stat/find defaults to workspace root. Required for read/write/delete."
+		},
+		"content": {
+			"type": "string",
+			"description": "File content to write. Required for write operation."
 		},
 		"pattern": {
 			"type": "string",
@@ -43,9 +47,11 @@ func fileManagerTool(box *mcp.Sandbox) mcp.ToolDef {
 	return mcp.ToolDef{
 		Name:      "file_manager",
 		Clearance: models.ClearanceLead,
-		Description: "Read-only project structure overview. " +
-			"Operations: tree (recursive directory listing), stat (file metadata), find (glob search). " +
+		Description: "Project workspace file operations. " +
+			"Operations: tree (recursive directory listing), stat (file metadata), find (glob search), " +
+			"read (return file contents), write (create or overwrite a file), delete (remove a file). " +
 			"All paths are scoped to the project workspace — cannot access brain files or home directory. " +
+			"Parent directories are created automatically on write. " +
 			"To update your own brain files (soul, persona, skills) use the update_self tool instead.",
 		Schema:  fileManagerSchema,
 		Handler: fileManagerHandler(box),
@@ -55,12 +61,20 @@ func fileManagerTool(box *mcp.Sandbox) mcp.ToolDef {
 func fileManagerHandler(box *mcp.Sandbox) mcp.Handler {
 	return func(ctx context.Context, args map[string]any) (string, error) {
 		op, _ := args["operation"].(string)
-
-		// Resolve the root path (defaults to sandbox root).
 		pathArg, _ := args["path"].(string)
-		if pathArg == "" {
-			pathArg = "."
+
+		// read/write/delete require an explicit path.
+		switch op {
+		case "read", "write", "delete":
+			if pathArg == "" {
+				return "", fmt.Errorf("file_manager: %s requires a path argument", op)
+			}
+		default:
+			if pathArg == "" {
+				pathArg = "."
+			}
 		}
+
 		root, err := box.Resolve(pathArg)
 		if err != nil {
 			return "", err
@@ -84,8 +98,18 @@ func fileManagerHandler(box *mcp.Sandbox) mcp.Handler {
 			}
 			return fmFind(root, pattern)
 
+		case "read":
+			return fmRead(root)
+
+		case "write":
+			content, _ := args["content"].(string)
+			return fmWrite(root, content)
+
+		case "delete":
+			return fmDelete(root)
+
 		default:
-			return "", fmt.Errorf("file_manager: unknown operation %q (must be tree, stat, or find)", op)
+			return "", fmt.Errorf("file_manager: unknown operation %q (must be tree, stat, find, read, write, or delete)", op)
 		}
 	}
 }
@@ -185,4 +209,51 @@ func fmFind(root, pattern string) (string, error) {
 		return fmt.Sprintf("no files matching %q found under %s", pattern, root), nil
 	}
 	return strings.Join(matches, "\n"), nil
+}
+
+// fmRead returns the contents of a file. Refuses directories and caps at 1 MB.
+func fmRead(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("file_manager: read %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("file_manager: read %s: is a directory — use tree or find instead", path)
+	}
+	const maxBytes = 1 << 20 // 1 MB
+	if info.Size() > maxBytes {
+		return "", fmt.Errorf("file_manager: read %s: file too large (%d bytes, limit %d)", path, info.Size(), maxBytes)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("file_manager: read %s: %w", path, err)
+	}
+	return string(data), nil
+}
+
+// fmWrite creates or overwrites a file with the given content.
+// Parent directories are created automatically.
+func fmWrite(path, content string) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("file_manager: write %s: mkdir: %w", path, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("file_manager: write %s: %w", path, err)
+	}
+	return fmt.Sprintf("wrote %d bytes to %s", len(content), path), nil
+}
+
+// fmDelete removes a file. Refuses to delete directories.
+func fmDelete(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("file_manager: delete %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("file_manager: delete %s: is a directory — cannot delete directories", path)
+	}
+	if err := os.Remove(path); err != nil {
+		return "", fmt.Errorf("file_manager: delete %s: %w", path, err)
+	}
+	return fmt.Sprintf("deleted %s", path), nil
 }

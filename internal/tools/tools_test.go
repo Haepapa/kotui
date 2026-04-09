@@ -338,6 +338,84 @@ func TestFileManager_SandboxEnforced(t *testing.T) {
 	}
 }
 
+func TestFileManager_ReadWriteDelete(t *testing.T) {
+	eng, dir := newEngine(t)
+
+	// Write a new file.
+	res, err := exec(t, eng, models.ClearanceLead, "file_manager", map[string]any{
+		"operation": "write",
+		"path":      "scripts/hello.py",
+		"content":   "print('hello')\n",
+	})
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if !strings.Contains(res.Output, "wrote") {
+		t.Errorf("unexpected write output: %q", res.Output)
+	}
+
+	// Verify file exists on disk.
+	data, readErr := os.ReadFile(filepath.Join(dir, "scripts", "hello.py"))
+	if readErr != nil {
+		t.Fatalf("file not created on disk: %v", readErr)
+	}
+	if string(data) != "print('hello')\n" {
+		t.Errorf("content mismatch: %q", string(data))
+	}
+
+	// Read it back via the tool.
+	res, err = exec(t, eng, models.ClearanceLead, "file_manager", map[string]any{
+		"operation": "read",
+		"path":      "scripts/hello.py",
+	})
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if res.Output != "print('hello')\n" {
+		t.Errorf("read content mismatch: %q", res.Output)
+	}
+
+	// Delete the file.
+	res, err = exec(t, eng, models.ClearanceLead, "file_manager", map[string]any{
+		"operation": "delete",
+		"path":      "scripts/hello.py",
+	})
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if !strings.Contains(res.Output, "deleted") {
+		t.Errorf("unexpected delete output: %q", res.Output)
+	}
+
+	// File should be gone.
+	if _, statErr := os.Stat(filepath.Join(dir, "scripts", "hello.py")); !os.IsNotExist(statErr) {
+		t.Errorf("expected file to be deleted, stat returned: %v", statErr)
+	}
+}
+
+func TestFileManager_WriteRequiresPath(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceLead, "file_manager", map[string]any{
+		"operation": "write",
+		"content":   "data",
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires a path") {
+		t.Errorf("expected path-required error, got: %v", err)
+	}
+}
+
+func TestFileManager_ReadSandboxEnforced(t *testing.T) {
+	eng, _ := newEngine(t)
+	_, err := exec(t, eng, models.ClearanceLead, "file_manager", map[string]any{
+		"operation": "read",
+		"path":      "../../etc/passwd",
+	})
+	var se *mcp.SandboxError
+	if !errors.As(err, &se) {
+		t.Errorf("expected SandboxError for out-of-sandbox read, got %T: %v", err, err)
+	}
+}
+
 // ============================================================
 // iot_gateway tool
 // ============================================================
