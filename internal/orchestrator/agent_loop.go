@@ -425,6 +425,19 @@ func (ra *RunningAgent) History() []ollama.ChatMessage {
 	return out
 }
 
+// LastAssistantMessage returns the most recent assistant-role message in
+// history, or an empty string if none exists yet. Used by the orchestrator to
+// inject a "your previous response was…" reminder into follow-up prompts so
+// small models don't ignore their own prior output.
+func (ra *RunningAgent) LastAssistantMessage() string {
+	for i := len(ra.history) - 1; i >= 0; i-- {
+		if ra.history[i].Role == "assistant" {
+			return ra.history[i].Content
+		}
+	}
+	return ""
+}
+
 // SystemPrompt returns the active system prompt.
 func (ra *RunningAgent) SystemPrompt() string { return ra.sysPrompt }
 

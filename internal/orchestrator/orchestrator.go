@@ -318,9 +318,22 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	var augmented string
 	if hasHistory {
 		// The model has the full conversation in history. Deliver the raw follow-up
-		// and tell it to proceed once context is clear — no need to re-explain the
-		// entire framework.
-		augmented = fmt.Sprintf("Boss: %s\n\n(You have the full conversation above. If this message provides the answer or context you needed, proceed with the original request now — decompose into tasks and get the team started. If still unclear, ask one final focused question. Before any tool call, output a confidence signal on its own line.)", strings.TrimSpace(command))
+		// with an explicit reminder of the last response so small models can't
+		// ignore their own prior output.
+		lastReply := o.lead.LastAssistantMessage()
+		var contextReminder string
+		if lastReply != "" {
+			// Trim to 1500 chars to avoid overwhelming the context with a long
+			// prior response (e.g. a generated script). The model has the full
+			// text in its history; this is just a focal reminder.
+			trimmed := lastReply
+			if len(trimmed) > 1500 {
+				trimmed = trimmed[:1500] + "\n…[truncated — full response is in your conversation history]"
+			}
+			contextReminder = fmt.Sprintf("\n\nYour previous response was:\n---\n%s\n---\n", trimmed)
+		}
+		augmented = fmt.Sprintf("Boss: %s%s\n(You have the full conversation above. If this follow-up builds on your previous response, continue from where you left off. If it is a new task, decompose and assign it. Before any tool call, output a confidence signal on its own line.)",
+			strings.TrimSpace(command), contextReminder)
 	} else {
 		augmented = decomposePrompt(command)
 	}
@@ -618,6 +631,15 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 
 	// Wrap with structured pre-flight reasoning so the agent considers
 	// identity changes and tool calls before composing its reply.
+	// For follow-up turns, prepend a reminder of the last response so small
+	// models can't ignore their own prior output.
+	if lastReply := ra.LastAssistantMessage(); lastReply != "" {
+		trimmed := lastReply
+		if len(trimmed) > 1500 {
+			trimmed = trimmed[:1500] + "\n…[truncated — full response is in your conversation history]"
+		}
+		augmented = fmt.Sprintf("Your previous response was:\n---\n%s\n---\n\n%s", trimmed, augmented)
+	}
 	augmented = dmTurnPrompt(augmented)
 
 	// Store the raw user message in history (not the dmTurnPrompt wrapper) so
