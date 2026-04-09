@@ -797,3 +797,74 @@ END_UPDATE_PERSONA`
 		t.Errorf("expected empty persona, got %q", persona)
 	}
 }
+
+// ============================================================
+// Intent classification prompts
+// ============================================================
+
+func TestClassifyPrompt_ContainsAllCategories(t *testing.T) {
+prompt := orchestrator.ExportedClassifyPrompt("please save that to a file", "here is your code")
+for _, word := range []string{"TASK", "BRIEF", "CHAT", "FOLLOWUP"} {
+if !strings.Contains(prompt, word) {
+t.Errorf("classifyPrompt missing category %q", word)
+}
+}
+}
+
+func TestClassifyPrompt_IncludesPriorContextWhenPresent(t *testing.T) {
+prompt := orchestrator.ExportedClassifyPrompt("save that to a file", "```python\nprint('hello')\n```")
+if !strings.Contains(prompt, "previous response") {
+t.Errorf("expected prior context hint in classify prompt, got: %s", prompt[:200])
+}
+}
+
+func TestClassifyPrompt_NoPriorContextWhenEmpty(t *testing.T) {
+prompt := orchestrator.ExportedClassifyPrompt("write a hello world script", "")
+if strings.Contains(prompt, "previous response") {
+t.Errorf("expected no context hint when lastReply is empty")
+}
+}
+
+func TestBriefAckPrompt_ContainsCommand(t *testing.T) {
+prompt := orchestrator.ExportedBriefAckPrompt("I want to build an IoT dashboard")
+if !strings.Contains(prompt, "IoT dashboard") {
+t.Errorf("briefAckPrompt missing command text")
+}
+if !strings.Contains(strings.ToLower(prompt), "task list") {
+t.Errorf("briefAckPrompt should instruct not to output a task list")
+}
+}
+
+func TestChatReplyPrompt_ContainsCommand(t *testing.T) {
+prompt := orchestrator.ExportedChatReplyPrompt("hey, how's it going?")
+if !strings.Contains(prompt, "how's it going?") {
+t.Errorf("chatReplyPrompt missing command text")
+}
+}
+
+func TestFollowUpPrompt_ContainsBothCommandAndLastReply(t *testing.T) {
+lastReply := "```python\nprint('sorted')\n```"
+command := "please save that to scripts/sort.py"
+prompt := orchestrator.ExportedFollowUpPrompt(command, lastReply)
+if !strings.Contains(prompt, "scripts/sort.py") {
+t.Errorf("followUpPrompt missing command")
+}
+if !strings.Contains(prompt, "sorted") {
+t.Errorf("followUpPrompt missing last reply content")
+}
+// Should instruct to call a tool, not re-plan.
+if !strings.Contains(strings.ToLower(prompt), "tool") {
+t.Errorf("followUpPrompt should mention tool call")
+}
+}
+
+func TestFollowUpPrompt_TruncatesLongLastReply(t *testing.T) {
+longReply := strings.Repeat("x", 3000)
+prompt := orchestrator.ExportedFollowUpPrompt("save it", longReply)
+if strings.Contains(prompt, strings.Repeat("x", 2001)) {
+t.Errorf("followUpPrompt should truncate last reply at 2000 chars")
+}
+if !strings.Contains(prompt, "truncated") {
+t.Errorf("followUpPrompt should indicate truncation")
+}
+}

@@ -111,6 +111,30 @@ func newRunningAgent(
 	}
 }
 
+// TurnOnce sends a single inference call with custom model options and returns
+// the raw response text. Unlike Turn, it does not run the tool loop, does not
+// append to history, and does not check confidence/escalation signals. It is
+// intended for lightweight classification calls where speed matters more than
+// agent behaviour.
+func (ra *RunningAgent) TurnOnce(ctx context.Context, prompt string, opts *ollama.ModelOptions) (string, error) {
+	msgs := []ollama.ChatMessage{{Role: "user", Content: prompt}}
+	if ra.sysPrompt != "" {
+		msgs = append([]ollama.ChatMessage{{Role: "system", Content: ra.sysPrompt}}, msgs...)
+	}
+	result, err := ra.inferrer.Chat(ctx, ollama.ChatRequest{
+		Model:     ra.Model,
+		Messages:  msgs,
+		KeepAlive: ra.KeepAlive,
+		Think:     boolPtr(false),
+		Options:   opts,
+	})
+	if err != nil {
+		return "", err
+	}
+	_, response := extractThinkBlocks(result.Content)
+	return strings.TrimSpace(response), nil
+}
+
 // Turn sends a user message, runs the agentic loop (tool calls), and returns
 // the final assistant text.
 //
@@ -581,4 +605,104 @@ Respond naturally and warmly. Acknowledge any team members mentioned. No JSON, n
    - Score < 0.7 → output ONLY the signal; do NOT proceed. Explain what's needed.
 
 Respond now.`, strings.TrimSpace(bossCommand))
+}
+
+// briefAckPrompt is used when the message is classified as a project introduction
+// or context-setting brief. The model should respond warmly and ask one question.
+func briefAckPrompt(command string) string {
+	return fmt.Sprintf(`**Think concisely — one pass only.**
+
+You are the Lead agent. The Boss has sent a project introduction or context brief — they are sharing what they plan to work on, NOT asking you to start executing yet.
+
+Respond as a team lead would on the first day of a new project:
+- Acknowledge warmly and show genuine interest
+- Pick out one interesting or important detail to comment on
+- Ask ONE focused clarifying question that will be useful when work begins
+- Keep it brief — 2–4 sentences total
+
+Do NOT output a task list. Do NOT start executing. This is the start of a conversation.
+
+Message from Boss:
+---
+%s
+---
+
+Respond now.`, strings.TrimSpace(command))
+}
+
+// chatReplyPrompt is used when the message is classified as casual conversation,
+// a greeting, or a general question with no executable task.
+func chatReplyPrompt(command string) string {
+	return fmt.Sprintf(`**Think concisely — one pass only.**
+
+You are the Lead agent. The Boss has sent a conversational message — a greeting, question, or general discussion.
+
+Respond naturally as a colleague would. Be warm, direct, and concise. No task lists, no JSON, no formal structure.
+
+Message from Boss:
+---
+%s
+---
+
+Respond now.`, strings.TrimSpace(command))
+}
+
+// followUpPrompt is used when the Boss's message is a direct action request
+// on something the Lead just produced — "save that", "put it in a file",
+// "output it to X", "run that", "rename it". The model should execute immediately
+// rather than re-planning.
+func followUpPrompt(command, lastReply string) string {
+	trimmed := lastReply
+	if len(trimmed) > 2000 {
+		trimmed = trimmed[:2000] + "\n…[truncated — full output is in your conversation history]"
+	}
+	return fmt.Sprintf(`**Think concisely — one pass only. Act immediately.**
+
+You are the Lead agent. The Boss is asking you to act on something you just produced. This is NOT a new task — it is a direct follow-up to your previous response.
+
+Your previous response was:
+---
+%s
+---
+
+The Boss now says:
+---
+%s
+---
+
+**What to do:**
+Execute immediately. If this requires a tool call (e.g. writing a file, reading a file, running code):
+1. Output a confidence signal on its own line: {"confidence_score": <0.0–1.0>, "reason": "<why>"}
+2. If score ≥ 0.7 — call the tool immediately. Do NOT re-plan, do NOT output a new task list.
+3. If score < 0.7 — ask ONE clarifying question only.
+
+If no tool is needed, respond directly and concisely.
+
+Respond now.`, strings.TrimSpace(trimmed), strings.TrimSpace(command))
+}
+
+// classifyPrompt returns a short, fast classification prompt. It is designed to
+// be run with Think:false and a very small NumPredict so the model returns a
+// single word as quickly as possible.
+//
+// Valid outputs: TASK | BRIEF | CHAT | FOLLOWUP
+func classifyPrompt(command, lastReply string) string {
+	contextHint := ""
+	if lastReply != "" {
+		preview := lastReply
+		if len(preview) > 300 {
+			preview = preview[:300] + "…"
+		}
+		contextHint = fmt.Sprintf("\n\nContext — the agent's previous response was:\n%s", preview)
+	}
+	return fmt.Sprintf(`Classify the following message in ONE WORD. Reply with exactly one of:
+
+TASK     — a direct instruction to create, write, build, fix, or do something new
+BRIEF    — context-setting or project introduction; the sender is explaining what they'll be working on, not asking for immediate action
+CHAT     — greeting, casual question, or general conversation with no concrete action requested
+FOLLOWUP — a short directive that builds directly on the agent's immediately preceding response (e.g. "save that", "output it to a file", "put that in scripts/", "run that", "rename it")%s
+
+Message: %s
+
+Classification (ONE WORD only):`, contextHint, strings.TrimSpace(command))
 }

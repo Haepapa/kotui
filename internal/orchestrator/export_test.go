@@ -59,3 +59,11 @@ var (
 	ExportedP2Interactive = P2Interactive
 	ExportedP3Background  = P3Background
 )
+
+// Prompt helpers — exported for tests.
+var (
+	ExportedClassifyPrompt  = classifyPrompt
+	ExportedBriefAckPrompt  = briefAckPrompt
+	ExportedChatReplyPrompt = chatReplyPrompt
+	ExportedFollowUpPrompt  = followUpPrompt
+)

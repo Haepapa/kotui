@@ -295,6 +295,50 @@ func (o *Orchestrator) channelRawFn(agentID string) func(models.MessageKind, str
 	}
 }
 
+// classifyIntent runs a fast, lightweight classification call to determine the
+// intent of a Boss message before the main inference. It creates a minimal
+// ephemeral agent (no system prompt, no history) so the classification is pure
+// and unaffected by accumulated context.
+//
+// Returns one of: "TASK", "BRIEF", "CHAT", "FOLLOWUP".
+// Falls back to "TASK" on any error so the main pipeline always proceeds.
+func (o *Orchestrator) classifyIntent(ctx context.Context, command string) string {
+	lastReply := o.lead.LastAssistantMessage()
+	prompt := classifyPrompt(command, lastReply)
+
+	// Ephemeral classifier agent: no system prompt, no MCP tools, minimal options.
+	classifier := newRunningAgent(
+		"classifier", "Classifier",
+		o.cfg.LeadModel,
+		models.ClearanceLead,
+		ollama.ForDuration(30*time.Second), // briefly warm, then unload
+		"",                                  // no system prompt
+		o.inferrer, o.mcpEng,
+	)
+	// Use a short timeout — classification should be near-instant.
+	classCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	result, err := classifier.TurnOnce(classCtx, prompt, &ollama.ModelOptions{
+		NumPredict:  10,
+		ThinkBudget: 0,
+	})
+	if err != nil {
+		o.log.Warn("classifyIntent: inference failed, defaulting to TASK", "err", err)
+		return "TASK"
+	}
+
+	// Parse — accept the first recognised word anywhere in the response.
+	upper := strings.ToUpper(strings.TrimSpace(result))
+	for _, candidate := range []string{"FOLLOWUP", "BRIEF", "CHAT", "TASK"} {
+		if strings.Contains(upper, candidate) {
+			return candidate
+		}
+	}
+	o.log.Warn("classifyIntent: unrecognised response, defaulting to TASK", "response", result)
+	return "TASK"
+}
+
 // HandleBossCommand is the main entry point for a Boss instruction.
 // It runs the full Lead → task decomposition → Worker loop.
 // onChunk, if non-nil, receives streamed tokens from the Lead for the live
@@ -325,41 +369,45 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 
 	o.log.Info("boss command received", "command", truncate(command, 80))
 
-	// Step 1: Lead decomposes the command into sub-tasks.
-	// For the first message use the full task-decomposition template so the model
-	// understands its role and output format.  For follow-up messages (history
-	// already exists) send just the raw command — the model already has the
-	// instructions in its history and wrapping again makes each follow-up look
-	// like a new standalone task, causing it to forget prior context.
+	// Step 1: Classify intent then route to the appropriate prompt template.
+	//
+	// Option 6 (two-step): a fast classification call (no thinking, ≤10 tokens)
+	// determines the message category before the main inference. This prevents
+	// "context drowning" where decomposePrompt() acts as a full re-onboarding on
+	// every turn, causing small models to forget prior context.
+	//
+	// Option 4 (aligned prompts): each category gets a purpose-built prompt that
+	// mirrors the DM prompt's "Understand → Act" structure:
+	//   TASK     → decomposePrompt (first turn) or taskFollowUpPrompt (with history)
+	//   BRIEF    → briefAckPrompt (warm acknowledgement, no task list)
+	//   CHAT     → chatReplyPrompt (conversational, no JSON)
+	//   FOLLOWUP → followUpPrompt (direct action on prior output, skip decompose)
 	//
 	// IMPORTANT: always call InjectHistoryEntry(command) before TurnStream so
-	// the raw user message (not the augmented prompt wrapper) is stored in
-	// history. This keeps the history readable as a natural conversation,
-	// preventing the model from being confused by decomposePrompt boilerplate
-	// on follow-up turns.
+	// the raw user message (not the augmented wrapper) is stored in history.
+	lastReply := o.lead.LastAssistantMessage()
 	hasHistory := len(o.lead.History()) > 0
-	var augmented string
+
+	// Run classification (skipped when there is no prior history — first message
+	// is always routed through the full decomposePrompt to establish context).
+	intent := "TASK"
 	if hasHistory {
-		// The model has the full conversation in history. Deliver the raw follow-up
-		// with an explicit reminder of the last response so small models can't
-		// ignore their own prior output.
-		lastReply := o.lead.LastAssistantMessage()
-		var contextReminder string
-		if lastReply != "" {
-			// Trim to 1500 chars to avoid overwhelming the context with a long
-			// prior response (e.g. a generated script). The model has the full
-			// text in its history; this is just a focal reminder.
-			trimmed := lastReply
-			if len(trimmed) > 1500 {
-				trimmed = trimmed[:1500] + "\n…[truncated — full response is in your conversation history]"
-			}
-			contextReminder = fmt.Sprintf("\n\nYour previous response was:\n---\n%s\n---\n", trimmed)
-		}
-		augmented = fmt.Sprintf("Boss: %s%s\n(You have the full conversation above. If this follow-up builds on your previous response, continue from where you left off. If it is a new task, decompose and assign it. Before any tool call, output a confidence signal on its own line.)",
-			strings.TrimSpace(command), contextReminder)
-	} else {
+		intent = o.classifyIntent(ctx, command)
+		o.log.Info("intent classified", "intent", intent, "command", truncate(command, 60))
+	}
+
+	var augmented string
+	switch intent {
+	case "FOLLOWUP":
+		augmented = followUpPrompt(command, lastReply)
+	case "BRIEF":
+		augmented = briefAckPrompt(command)
+	case "CHAT":
+		augmented = chatReplyPrompt(command)
+	default: // "TASK" (and fallback)
 		augmented = decomposePrompt(command)
 	}
+
 	// Store the raw command in history (not the augmented wrapper) so that
 	// follow-up turns see a natural conversation, not prompt-engineering boilerplate.
 	o.lead.InjectHistoryEntry(command)
