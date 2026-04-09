@@ -949,6 +949,9 @@ func (o *Orchestrator) HandbookBroadcast(handbookPath string) error {
 // Hiring returns the HiringManager for managing Trial agent interviews.
 func (o *Orchestrator) Hiring() *HiringManager { return o.hiring }
 
+// MCPEngine returns the MCP engine for tool introspection.
+func (o *Orchestrator) MCPEngine() *mcp.Engine { return o.mcpEng }
+
 // VRAMProfile returns the detected VRAM profile (dual or swap).
 func (o *Orchestrator) VRAMProfile() models.VRAMProfile { return o.vram.Profile() }
 

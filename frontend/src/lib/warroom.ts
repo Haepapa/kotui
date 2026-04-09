@@ -19,6 +19,7 @@ import {
   GetOrCreateDirectConversation as _GetOrCreateDirectConversation,
   GetPendingApprovals as _GetPendingApprovals,
   GetProjects as _GetProjects,
+  GetTools as _GetTools,
   SaveAgentBrainFile as _SaveAgentBrainFile,
   SaveCompanyIdentity as _SaveCompanyIdentity,
   SaveConfig as _SaveConfig,
@@ -247,4 +248,15 @@ export function exportActivityLog(label: string, content: string): Promise<strin
 
 export function cancelCurrentOperation(): Promise<void> {
   return _CancelCurrentOperation() as Promise<void>;
+}
+
+export interface ToolInfo {
+  name: string;
+  description: string;
+  clearance: string;
+  schema: any;
+}
+
+export function getTools(): Promise<ToolInfo[]> {
+  return _GetTools() as Promise<ToolInfo[]>;
 }

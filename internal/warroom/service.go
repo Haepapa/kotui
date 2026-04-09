@@ -31,6 +31,7 @@ import (
 	"github.com/haepapa/kotui/internal/agent"
 	"github.com/haepapa/kotui/internal/config"
 	"github.com/haepapa/kotui/internal/dispatcher"
+	"github.com/haepapa/kotui/internal/mcp"
 	"github.com/haepapa/kotui/internal/memory"
 	"github.com/haepapa/kotui/internal/ollama"
 	"github.com/haepapa/kotui/internal/orchestrator"
@@ -1656,6 +1657,12 @@ func (s *WarRoomService) ExportActivityLog(ctx context.Context, label, content s
 		return "", fmt.Errorf("export log: write: %w", err)
 	}
 	return relPath, nil
+}
+
+// GetTools returns the catalogue of all MCP tools visible to Lead-clearance
+// agents. Used by the My Company → Tools tab in the frontend.
+func (s *WarRoomService) GetTools(ctx context.Context) ([]mcp.ToolInfo, error) {
+	return s.orch.MCPEngine().ListTools(models.ClearanceLead), nil
 }
 
 // RevealSandboxFile opens the OS file explorer and selects/highlights the file.

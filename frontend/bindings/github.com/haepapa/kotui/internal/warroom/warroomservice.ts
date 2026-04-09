@@ -13,6 +13,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as mcp$0 from "../mcp/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as models$0 from "../../pkg/models/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -224,6 +227,16 @@ export function GetProjects(): $CancellablePromise<models$0.Project[]> {
 }
 
 /**
+ * GetTools returns the catalogue of all MCP tools visible to Lead-clearance
+ * agents. Used by the My Company → Tools tab in the frontend.
+ */
+export function GetTools(): $CancellablePromise<mcp$0.ToolInfo[]> {
+    return $Call.ByID(3632712532).then(($result: any) => {
+        return $$createType14($result);
+    });
+}
+
+/**
  * InitFirstRun checks whether the app has been used before.
  * On a fresh install (no projects exist) it creates a default "General" project,
  * opens a Lead DM conversation, and saves a welcome greeting so the user has an
@@ -231,7 +244,7 @@ export function GetProjects(): $CancellablePromise<models$0.Project[]> {
  */
 export function InitFirstRun(): $CancellablePromise<$models.FirstRunResult> {
     return $Call.ByID(787017174).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType15($result);
     });
 }
 
@@ -253,7 +266,7 @@ export function ListOllamaModels(endpoint: string): $CancellablePromise<string[]
  */
 export function ListSandboxFiles(): $CancellablePromise<$models.FileEntry[]> {
     return $Call.ByID(1919929905).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType17($result);
     });
 }
 
@@ -404,6 +417,8 @@ const $$createType9 = $Create.Array($$createType8);
 const $$createType10 = models$0.Approval.createFrom;
 const $$createType11 = $Create.Array($$createType10);
 const $$createType12 = $Create.Array($$createType0);
-const $$createType13 = $models.FirstRunResult.createFrom;
-const $$createType14 = $models.FileEntry.createFrom;
-const $$createType15 = $Create.Array($$createType14);
+const $$createType13 = mcp$0.ToolInfo.createFrom;
+const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = $models.FirstRunResult.createFrom;
+const $$createType16 = $models.FileEntry.createFrom;
+const $$createType17 = $Create.Array($$createType16);

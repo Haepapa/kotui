@@ -139,6 +139,31 @@ func (eng *Engine) SystemPromptFragment(clearance models.Clearance) string {
 // constructing tool args (e.g. when the agent returns a relative path).
 func (eng *Engine) Sandbox() *Sandbox { return eng.sandbox }
 
+// ToolInfo is a serialisable summary of a registered MCP tool, used by the
+// frontend to display the tool catalogue.
+type ToolInfo struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Clearance   string          `json:"clearance"`
+	Schema      json.RawMessage `json:"schema"`
+}
+
+// ListTools returns metadata for all tools accessible at the given clearance
+// level, in registration order.
+func (eng *Engine) ListTools(clearance models.Clearance) []ToolInfo {
+	defs := eng.registry.listForClearance(clearance)
+	out := make([]ToolInfo, len(defs))
+	for i, d := range defs {
+		out[i] = ToolInfo{
+			Name:        d.Name,
+			Description: d.Description,
+			Clearance:   string(d.Clearance),
+			Schema:      d.Schema,
+		}
+	}
+	return out
+}
+
 // itoa converts a small int to string without importing strconv everywhere.
 func itoa(n int) string {
 	if n == 0 {
