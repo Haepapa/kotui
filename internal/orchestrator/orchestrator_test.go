@@ -112,7 +112,41 @@ func TestParseToolCall_NoToolKey_Skipped(t *testing.T) {
 	}
 }
 
-// --- Escalation signal parsing --------------------------------------------
+func TestParseToolCall_JsonFenceWithFileContent(t *testing.T) {
+	// Replicates the real failure: model wraps a write tool call in a ```json
+	// fence, with Python code (containing { } dict literals) as the content.
+	text := "```json\n" +
+		`{"tool": "file_manager", "args": {"operation": "write", "path": "scripts/sort.py", "content": "data = {'a': 1, 'b': 2}\nprint(sorted(data.items()))\n"}}` +
+		"\n```\n\nDone — file written."
+
+	call := orchestrator.ExportedParseToolCall(text)
+	if call == nil {
+		t.Fatal("expected tool call from fenced JSON block, got nil")
+	}
+	if call.ToolName != "file_manager" {
+		t.Errorf("expected file_manager, got %q", call.ToolName)
+	}
+	if call.Args["operation"] != "write" {
+		t.Errorf("expected operation=write, got %q", call.Args["operation"])
+	}
+	if call.Args["path"] != "scripts/sort.py" {
+		t.Errorf("expected path=scripts/sort.py, got %q", call.Args["path"])
+	}
+}
+
+func TestParseToolCall_BracesInsideStringValue(t *testing.T) {
+	// Braces inside a JSON string must not confuse the object boundary finder.
+	text := `{"tool": "file_manager", "args": {"operation": "write", "path": "x.py", "content": "d = {'k': {'nested': 1}}\n"}}`
+	call := orchestrator.ExportedParseToolCall(text)
+	if call == nil {
+		t.Fatal("expected tool call with braces in content string, got nil")
+	}
+	if call.ToolName != "file_manager" {
+		t.Errorf("expected file_manager, got %q", call.ToolName)
+	}
+}
+
+
 
 func TestParseEscalation_Detected(t *testing.T) {
 	text := `I cannot handle this task.

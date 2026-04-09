@@ -110,33 +110,14 @@ func parseToolCallFromBlock(text string) *models.ToolCall {
 		}
 	}
 
-	// Find the outermost { ... } span and try to parse as tool call.
-	start := strings.Index(stripped, "{")
-	if start < 0 {
-		return nil
-	}
-	// Walk forward counting brace depth to find the matching close.
-	depth := 0
-	end := -1
-	for i := start; i < len(stripped); i++ {
-		switch stripped[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				end = i
-			}
-		}
-		if end >= 0 {
-			break
-		}
-	}
-	if end < 0 {
+	// Use a JSON-string-aware extractor so that { } inside string values
+	// (e.g. Python dict literals in a "content" field) don't fool the brace
+	// counter into terminating early.
+	candidate := extractJSONObject(stripped)
+	if candidate == "" {
 		return nil
 	}
 
-	candidate := strings.ReplaceAll(stripped[start:end+1], "\n", " ")
 	var raw struct {
 		Tool string         `json:"tool"`
 		Args map[string]any `json:"args"`
@@ -154,6 +135,51 @@ func parseToolCallFromBlock(text string) *models.ToolCall {
 		ToolName: raw.Tool,
 		Args:     raw.Args,
 	}
+}
+
+// extractJSONObject finds the first outermost {...} object in text, correctly
+// skipping { and } characters that appear inside JSON string values.
+// Returns the raw JSON text including the braces, or "" if none found.
+func extractJSONObject(text string) string {
+	start := strings.Index(text, "{")
+	if start < 0 {
+		return ""
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+
+	for i := start; i < len(text); i++ {
+		c := text[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+
+		switch c {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return text[start : i+1]
+			}
+		}
+	}
+	return ""
 }
 
 // extractThinkBlocks separates <think>...</think> content from the main response.
