@@ -366,6 +366,17 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 			})
 			return nil
 		}
+		if errors.Is(err, context.Canceled) {
+			o.disp.DispatchSummary(models.Message{
+				ProjectID:      o.projectID,
+				ConversationID: o.convID,
+				Kind:           models.KindSystemEvent,
+				Tier:           models.TierSummary,
+				AgentID:        "lead",
+				Content:        "⛔ Stopped by user.",
+			})
+			return nil
+		}
 		return fmt.Errorf("lead decomposition: %w", err)
 	}
 
@@ -674,6 +685,17 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 					Kind:           models.KindSystemEvent,
 					Tier:           models.TierSummary,
 					Content:        fmt.Sprintf("⏱ **Inference timed out** after %.0f seconds — the model was still thinking when the limit was reached.\n\nTo fix this: go to **Settings → Local Ollama → Inference Timeout** and increase the value (e.g. 600 for 10 minutes).", toErr.Elapsed),
+				})
+				return nil
+			}
+			if errors.Is(err, context.Canceled) {
+				o.disp.DispatchSummary(models.Message{
+					ProjectID:      o.projectID,
+					ConversationID: convID,
+					Kind:           models.KindSystemEvent,
+					Tier:           models.TierSummary,
+					AgentID:        agentID,
+					Content:        "⛔ Stopped by user.",
 				})
 				return nil
 			}

@@ -28,6 +28,14 @@ export function ArchiveProject(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * CancelCurrentOperation cancels whatever inference is currently running.
+ * A "⛔ Stopped by user." system message will appear in chat via the orchestrator.
+ */
+export function CancelCurrentOperation(): $CancellablePromise<void> {
+    return $Call.ByID(967209215);
+}
+
+/**
  * CreateProject creates a new project, marks it active, and switches to it.
  */
 export function CreateProject(name: string, description: string): $CancellablePromise<models$0.Project | null> {

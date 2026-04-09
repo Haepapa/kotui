@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { KotuiMessage, ViewMode, HeartbeatState, QueueState } from '../lib/types';
-  import { sendBossCommand, sendDirectMessage } from '../lib/warroom';
+  import { sendBossCommand, sendDirectMessage, cancelCurrentOperation } from '../lib/warroom';
   import { wr, agentName, goToFiles, extractSubTask } from '../stores/warroom.svelte';
   import MarkdownRenderer from './MarkdownRenderer.svelte';
 
@@ -19,6 +19,7 @@
 
   let input = $state('');
   let sendError = $state('');
+  let stopping = $state(false);
   let scrollEl = $state<HTMLDivElement | null>(null);
   let inputEl = $state<HTMLTextAreaElement | null>(null);
   let copiedKey = $state('');
@@ -224,6 +225,18 @@
       copiedKey = key;
       setTimeout(() => { if (copiedKey === key) copiedKey = ''; }, 1500);
     });
+  }
+
+  async function stop() {
+    if (stopping) return;
+    stopping = true;
+    try {
+      await cancelCurrentOperation();
+    } catch {
+      // ignore
+    } finally {
+      setTimeout(() => { stopping = false; }, 1500);
+    }
   }
 </script>
 
@@ -445,6 +458,22 @@
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
       </button>
+      {#if isBusy}
+        <button
+          class="stop-btn"
+          disabled={stopping}
+          onclick={stop}
+          title="Stop current inference"
+          aria-label="Stop"
+        >
+          {#if stopping}
+            <span class="stop-label">Stopping…</span>
+          {:else}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span class="stop-label">Stop</span>
+          {/if}
+        </button>
+      {/if}
     </div>
     <p class="composer-hint">Enter to send · Shift+Enter for new line</p>
   </div>
@@ -913,6 +942,26 @@
   }
   .send-btn:hover:not(:disabled) { background: var(--accent-btn-hover); }
   .send-btn:disabled { opacity: 0.25; cursor: default; }
+  .stop-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    height: 34px;
+    padding: 0 0.75rem;
+    border-radius: 9px;
+    border: none;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+    white-space: nowrap;
+  }
+  .stop-btn:hover:not(:disabled) { background: #dc2626; }
+  .stop-btn:disabled { opacity: 0.6; cursor: default; }
+  .stop-label { line-height: 1; }
   .composer-hint {
     font-size: 0.75rem;
     color: var(--composer-hint);

@@ -4,6 +4,7 @@
 // Event subscriptions still use Events.On directly.
 
 import {
+  CancelCurrentOperation as _CancelCurrentOperation,
   CreateProject as _CreateProject,
   DecideApproval as _DecideApproval,
   GetActiveConversation as _GetActiveConversation,
@@ -242,4 +243,8 @@ export function revealSandboxFile(relPath: string): Promise<void> {
 
 export function exportActivityLog(label: string, content: string): Promise<string> {
   return _ExportActivityLog(label, content) as Promise<string>;
+}
+
+export function cancelCurrentOperation(): Promise<void> {
+  return _CancelCurrentOperation() as Promise<void>;
 }

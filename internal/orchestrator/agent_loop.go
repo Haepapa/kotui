@@ -135,6 +135,9 @@ func (ra *RunningAgent) Turn(ctx context.Context, userContent string) (string, e
 			Messages:  msgs,
 			KeepAlive: ra.KeepAlive,
 			Think:     boolPtr(true),
+			Options: &ollama.ModelOptions{
+				ThinkBudget: 2048,
+			},
 		})
 		elapsed := time.Since(start)
 		if err != nil {
@@ -254,6 +257,9 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 			Messages:  msgs,
 			KeepAlive: ra.KeepAlive,
 			Think:     boolPtr(true),
+			Options: &ollama.ModelOptions{
+				ThinkBudget: 2048,
+			},
 		})
 		if err != nil {
 			elapsed := time.Since(start)
@@ -310,14 +316,19 @@ func (ra *RunningAgent) TurnStream(ctx context.Context, userContent string, onCh
 		}
 		elapsed := time.Since(start)
 
-		// If the stream was cut by a deadline, surface a typed error so the
-		// caller can show a clear "inference timed out" message to the user.
-		if streamErr != nil && errors.Is(streamErr, context.DeadlineExceeded) {
-			ra.rawLog(models.KindSystemEvent, fmt.Sprintf("⏱ inference timed out after %.0fs  agent=%s", elapsed.Seconds(), ra.AgentName))
-			return "", &InferenceTimeoutError{
-				AgentID:  ra.AgentID,
-				Elapsed:  elapsed.Seconds(),
-				TimeoutS: elapsed.Seconds(), // actual elapsed ≈ configured timeout
+		// If the stream was cut by a deadline or cancellation, surface a typed error.
+		if streamErr != nil {
+			if errors.Is(streamErr, context.DeadlineExceeded) {
+				ra.rawLog(models.KindSystemEvent, fmt.Sprintf("⏱ inference timed out after %.0fs  agent=%s", elapsed.Seconds(), ra.AgentName))
+				return "", &InferenceTimeoutError{
+					AgentID:  ra.AgentID,
+					Elapsed:  elapsed.Seconds(),
+					TimeoutS: elapsed.Seconds(), // actual elapsed ≈ configured timeout
+				}
+			}
+			if errors.Is(streamErr, context.Canceled) {
+				ra.rawLog(models.KindSystemEvent, fmt.Sprintf("⛔ inference cancelled after %.0fs  agent=%s", elapsed.Seconds(), ra.AgentName))
+				return "", context.Canceled
 			}
 		}
 
@@ -467,7 +478,9 @@ func (e *EscalationNeededError) Error() string {
 // It explicitly prompts the agent to recognise identity instructions and act on
 // them with update_self before composing its reply.
 func dmTurnPrompt(message string) string {
-	return fmt.Sprintf(`You have a direct message from the Boss. Before composing your reply, work through each step in order:
+	return fmt.Sprintf(`**Think concisely: work through each step once only. Do not second-guess yourself.**
+
+You have a direct message from the Boss. Before composing your reply, work through each step in order:
 
 1. **Understand**: What is the Boss communicating? (introduction / question / instruction / task)
 
@@ -500,7 +513,9 @@ Respond now. Work through each step before writing your reply.`, strings.TrimSpa
 }
 // a Boss command into a list of sub-tasks.
 func decomposePrompt(bossCommand string) string {
-	return fmt.Sprintf(`You are the Lead agent in a team channel. A message has arrived:
+	return fmt.Sprintf(`**Think budget: you have limited thinking tokens. Decide quickly. Do NOT repeat the same reasoning point twice. Once you identify the category, act immediately.**
+
+You are the Lead agent in a team channel. A message has arrived:
 
 ---
 %s

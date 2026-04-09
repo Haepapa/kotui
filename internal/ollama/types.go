@@ -65,6 +65,7 @@ type ModelOptions struct {
 	NumCtx      int     `json:"num_ctx,omitempty"`
 	NumPredict  int     `json:"num_predict,omitempty"`
 	TopP        float64 `json:"top_p,omitempty"`
+	ThinkBudget int     `json:"think_budget,omitempty"` // max thinking tokens for qwen3/deepseek-r1 models
 }
 
 // ChatResponseChunk is one line in the NDJSON stream from /api/chat.

@@ -15,6 +15,7 @@ package warroom
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -125,6 +126,10 @@ type WarRoomService struct {
 	chBatchMu      sync.Mutex
 	chBatchPending []string
 	chBatchRunning bool
+
+	// cancelCurrentOp, if non-nil, cancels the currently running inference
+	// operation (channel or DM). Protected by mu.
+	cancelCurrentOp context.CancelFunc
 
 	// Identity registry — caches soul/persona/skills in memory so
 	// GetAgentBrainFiles never hits disk on a cache-warm read.
@@ -353,6 +358,36 @@ func (s *WarRoomService) Shutdown() {
 		s.healthCancel()
 	}
 	s.mu.Unlock()
+}
+
+// setCurrentCancel registers a cancel function for the currently running
+// inference. Any previous cancel is called first to abort it.
+func (s *WarRoomService) setCurrentCancel(cancel context.CancelFunc) {
+	s.mu.Lock()
+	if s.cancelCurrentOp != nil {
+		s.cancelCurrentOp()
+	}
+	s.cancelCurrentOp = cancel
+	s.mu.Unlock()
+}
+
+// clearCurrentCancel clears the current cancel function after an operation ends.
+func (s *WarRoomService) clearCurrentCancel() {
+	s.mu.Lock()
+	s.cancelCurrentOp = nil
+	s.mu.Unlock()
+}
+
+// CancelCurrentOperation cancels whatever inference is currently running.
+// A "⛔ Stopped by user." system message will appear in chat via the orchestrator.
+func (s *WarRoomService) CancelCurrentOperation(ctx context.Context) error {
+	s.mu.Lock()
+	cancel := s.cancelCurrentOp
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return nil
 }
 
 // --- Exported methods callable from TypeScript ---------------------------
@@ -635,8 +670,17 @@ func (s *WarRoomService) SendBossCommand(ctx context.Context, command string) er
 			s.chBatchMu.Unlock()
 
 			combined := joinBatch(batch)
-			if err := s.orch.HandleBossCommand(context.Background(), combined, onChunk); err != nil {
-				s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+			opCtx, opCancel := context.WithCancel(context.Background())
+			s.setCurrentCancel(opCancel)
+			err := s.orch.HandleBossCommand(opCtx, combined, onChunk)
+			s.clearCurrentCancel()
+			opCancel()
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					// User cancelled — system message already dispatched by orchestrator.
+				} else {
+					s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+				}
 			}
 
 			s.chBatchMu.Lock()
@@ -1394,8 +1438,17 @@ func (s *WarRoomService) SendDirectMessage(ctx context.Context, agentID, message
 			s.dmBatchMu.Unlock()
 
 			combined := joinBatch(batch)
-			if err := s.orch.HandleDirectMessage(context.Background(), agentID, combined, convID, onChunk); err != nil {
-				s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+			opCtx, opCancel := context.WithCancel(context.Background())
+			s.setCurrentCancel(opCancel)
+			err := s.orch.HandleDirectMessage(opCtx, agentID, combined, convID, onChunk)
+			s.clearCurrentCancel()
+			opCancel()
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					// User cancelled — system message already dispatched by orchestrator.
+				} else {
+					s.app.Event.Emit("kotui:error", map[string]string{"error": err.Error()})
+				}
 			}
 
 			// After inference completes, check atomically if more messages arrived.
