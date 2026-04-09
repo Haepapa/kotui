@@ -249,8 +249,31 @@ func (o *Orchestrator) SetProject(ctx context.Context, projectID string) error {
 			return fmt.Errorf("orchestrator: get or create war-room conversation: %w", err)
 		}
 		o.convID = convID
+
+		// Seed the Lead agent with the last 20 turns from this channel's
+		// persisted history so it can recall prior exchanges after a restart.
+		if msgs, hErr := o.db.ListConversationHistory(ctx, convID, 20); hErr == nil && len(msgs) > 0 {
+			o.lead.SeedHistory(messagesToChatHistory(msgs))
+			o.log.Info("orchestrator: seeded lead history", "turns", len(msgs), "conv", convID)
+		}
 	}
 	return nil
+}
+
+// messagesToChatHistory converts persisted summary messages to Ollama chat
+// history entries. boss_command → user role; agent_message/consultation →
+// assistant role. Other kinds are skipped.
+func messagesToChatHistory(msgs []models.Message) []ollama.ChatMessage {
+	out := make([]ollama.ChatMessage, 0, len(msgs))
+	for _, m := range msgs {
+		switch m.Kind {
+		case models.KindBossCommand:
+			out = append(out, ollama.ChatMessage{Role: "user", Content: m.Content})
+		case models.KindAgentMessage, models.KindConsultation:
+			out = append(out, ollama.ChatMessage{Role: "assistant", Content: m.Content})
+		}
+	}
+	return out
 }
 
 // ProjectID returns the currently active project ID.
@@ -617,6 +640,16 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 			sysPrompt,
 			o.inferrer, o.mcpEng,
 		)
+		// Seed the new DM agent with its prior conversation history so it can
+		// recall previous exchanges after an app restart.
+		if o.db != nil {
+			if dmConvID, err := o.db.GetDMConversation(ctx, agentID); err == nil && dmConvID != "" {
+				if msgs, hErr := o.db.ListConversationHistory(ctx, dmConvID, 20); hErr == nil && len(msgs) > 0 {
+					ra.SeedHistory(messagesToChatHistory(msgs))
+					o.log.Info("orchestrator: seeded dm agent history", "agent", agentID, "turns", len(msgs))
+				}
+			}
+		}
 		o.dmAgents[agentID] = ra
 	}
 	o.dmAgentsMu.Unlock()

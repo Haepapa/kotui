@@ -181,3 +181,39 @@ func (db *DB) GetLatestConversation(ctx context.Context, projectID string) (stri
 	}
 	return id, nil
 }
+
+// ListConversationHistory returns the last `limit` conversational messages
+// (boss_command, agent_message, consultation) from a conversation, at the
+// summary tier, in chronological order. This is used to seed an agent's
+// in-memory history when the app restarts so it can recall prior exchanges.
+// Returns an empty slice if none exist.
+func (db *DB) ListConversationHistory(ctx context.Context, conversationID string, limit int) ([]models.Message, error) {
+if limit <= 0 {
+limit = 20
+}
+// SELECT the last `limit` rows via a subquery so we get the most recent
+// messages but return them in ascending (oldest-first) order.
+rows, err := db.QueryContext(ctx, `
+SELECT id, project_id, conversation_id, agent_id, kind, tier, content, metadata, created_at
+FROM (
+SELECT id, project_id, conversation_id, agent_id, kind, tier, content, metadata, created_at
+FROM messages
+WHERE conversation_id = ?
+  AND tier = ?
+  AND kind IN (?, ?, ?)
+ORDER BY created_at DESC
+LIMIT ?
+) ORDER BY created_at ASC`,
+conversationID,
+string(models.TierSummary),
+string(models.KindBossCommand),
+string(models.KindAgentMessage),
+string(models.KindConsultation),
+limit,
+)
+if err != nil {
+return nil, fmt.Errorf("store: list conversation history: %w", err)
+}
+defer rows.Close()
+return scanMessages(rows)
+}

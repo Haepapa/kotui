@@ -438,6 +438,17 @@ func (ra *RunningAgent) LastAssistantMessage() string {
 	return ""
 }
 
+// SeedHistory pre-populates the agent's conversation history from persisted
+// messages so it can recall prior exchanges after an app restart. Only call
+// this before the first TurnStream — calling it mid-session will corrupt the
+// history ordering.
+func (ra *RunningAgent) SeedHistory(msgs []ollama.ChatMessage) {
+	if len(msgs) == 0 {
+		return
+	}
+	ra.history = append(msgs, ra.history...)
+}
+
 // SystemPrompt returns the active system prompt.
 func (ra *RunningAgent) SystemPrompt() string { return ra.sysPrompt }
 
