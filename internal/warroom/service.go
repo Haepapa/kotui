@@ -1491,7 +1491,7 @@ type FileEntry struct {
 }
 
 // ListSandboxFiles returns the files and directories in the agent workspace.
-// The list is sorted: directories first (alphabetically), then files.
+// The list is sorted hierarchically: directories first (at each level), then files.
 // Returns an empty slice (not an error) when the sandbox does not exist yet.
 func (s *WarRoomService) ListSandboxFiles(ctx context.Context) ([]FileEntry, error) {
 	root := filepath.Join(s.cfg.App.DataDir, "sandbox")
@@ -1499,8 +1499,7 @@ func (s *WarRoomService) ListSandboxFiles(ctx context.Context) ([]FileEntry, err
 		return []FileEntry{}, nil
 	}
 
-	var dirs []FileEntry
-	var files []FileEntry
+	var entries []FileEntry
 
 	err := filepath.Walk(root, func(abs string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
@@ -1513,6 +1512,9 @@ func (s *WarRoomService) ListSandboxFiles(ctx context.Context) ([]FileEntry, err
 		if err != nil {
 			return nil
 		}
+		// Convert to slash to ensure consistent sorting on all platforms.
+		rel = filepath.ToSlash(rel)
+
 		entry := FileEntry{
 			Path:    rel,
 			Name:    info.Name(),
@@ -1520,21 +1522,35 @@ func (s *WarRoomService) ListSandboxFiles(ctx context.Context) ([]FileEntry, err
 			IsDir:   info.IsDir(),
 			ModTime: info.ModTime().UTC().Format(time.RFC3339),
 		}
-		if info.IsDir() {
-			dirs = append(dirs, entry)
-		} else {
-			files = append(files, entry)
-		}
+		entries = append(entries, entry)
 		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list sandbox files: %w", err)
 	}
 
-	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Path < dirs[j].Path })
-	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	sort.Slice(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		partsA := strings.Split(a.Path, "/")
+		partsB := strings.Split(b.Path, "/")
+		min := len(partsA)
+		if len(partsB) < min {
+			min = len(partsB)
+		}
+		for k := 0; k < min; k++ {
+			if partsA[k] != partsB[k] {
+				isDirA := k < len(partsA)-1 || a.IsDir
+				isDirB := k < len(partsB)-1 || b.IsDir
+				if isDirA != isDirB {
+					return isDirA
+				}
+				return partsA[k] < partsB[k]
+			}
+		}
+		return len(partsA) < len(partsB)
+	})
 
-	return append(dirs, files...), nil
+	return entries, nil
 }
 
 // ReadSandboxFile returns the text content of a file in the agent workspace.

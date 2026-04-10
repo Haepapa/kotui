@@ -157,7 +157,7 @@ func (eng *Engine) ListTools(clearance models.Clearance) []ToolInfo {
 		out[i] = ToolInfo{
 			Name:        d.Name,
 			Description: d.Description,
-			Clearance:   string(d.Clearance),
+			Clearance:   d.Clearance.String(),
 			Schema:      d.Schema,
 		}
 	}

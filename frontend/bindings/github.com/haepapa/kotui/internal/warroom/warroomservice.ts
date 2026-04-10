@@ -261,7 +261,7 @@ export function ListOllamaModels(endpoint: string): $CancellablePromise<string[]
 
 /**
  * ListSandboxFiles returns the files and directories in the agent workspace.
- * The list is sorted: directories first (alphabetically), then files.
+ * The list is sorted hierarchically: directories first (at each level), then files.
  * Returns an empty slice (not an error) when the sandbox does not exist yet.
  */
 export function ListSandboxFiles(): $CancellablePromise<$models.FileEntry[]> {
