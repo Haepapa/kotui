@@ -51,6 +51,7 @@ func RegisterAllWithHooks(
 		webSearchTool(),
 		projectCriticTool(box),
 		SelfUpdateTool(cfg.App.DataDir, onBrainUpdate),
+		WriteJournalTool(cfg.App.DataDir),
 		knowledgeBaseTool(box, getStore),
 	}
 

@@ -552,6 +552,10 @@ You have a direct message from the Boss. Before composing your reply, work throu
 
 5. **Tone**: What tone is appropriate for your reply?
 
+6. **Journal**: Once you have delivered your final reply, write a journal entry using write_journal.
+   Record: what the task was, the outcome, a brief summary, any lessons, and skills discovered.
+   Do this for EVERY meaningful interaction — treat it as your daily work diary.
+
 Message from Boss:
 ---
 %s
@@ -603,6 +607,9 @@ Respond naturally and warmly. Acknowledge any team members mentioned. No JSON, n
    {"confidence_score": <0.0–1.0>, "reason": "<why>"}
    - Score ≥ 0.7 → proceed with the tool call.
    - Score < 0.7 → output ONLY the signal; do NOT proceed. Explain what's needed.
+3. **After completing a task or giving a final answer**, write a journal entry using write_journal.
+   Record what was done, the outcome, a brief summary, and any lessons learned.
+   Treat this as your daily work diary — write an entry for every meaningful piece of work.
 
 Respond now.`, strings.TrimSpace(bossCommand))
 }

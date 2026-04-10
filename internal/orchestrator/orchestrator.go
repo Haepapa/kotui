@@ -498,15 +498,27 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	}
 	if len(tasks) == 0 {
 		// Lead answered directly (conversational, project brief, or simple task).
+		reply := humanReadableDecomposed(decomposed)
 		o.disp.DispatchSummary(models.Message{
 			ProjectID:      o.projectID,
 			ConversationID: o.convID,
 			Kind:           models.KindAgentMessage,
 			Tier:           models.TierSummary,
 			AgentID:        "lead",
-			Content:        humanReadableDecomposed(decomposed),
+			Content:        reply,
 			Metadata:       thinkingMeta(o.lead.LastThinking),
 		})
+		// Automatic fallback journal — ensures a record is written even if the
+		// agent did not call write_journal itself. The agent's own entry (if any)
+		// will be richer; this guarantees the diary is never empty after a turn.
+		go func() {
+			paths := agent.AgentPaths(o.cfg.DataDir, "lead")
+			_ = agent.WriteJournal(paths, agent.JournalEntry{
+				Task:    truncate(command, 120),
+				Outcome: "success",
+				Summary: truncate(reply, 300),
+			})
+		}()
 		return nil
 	}
 
@@ -818,6 +830,18 @@ func (o *Orchestrator) HandleDirectMessage(ctx context.Context, agentID, message
 			Content:        response,
 			Metadata:       meta,
 		})
+
+		// Automatic fallback journal for DM agents — guarantees a diary entry
+		// is written after every successful turn even when the agent did not call
+		// write_journal itself. The agent-written entry (if any) is richer.
+		go func() {
+			paths := agent.AgentPaths(o.cfg.DataDir, agentID)
+			_ = agent.WriteJournal(paths, agent.JournalEntry{
+				Task:    truncate(message, 120),
+				Outcome: "success",
+				Summary: truncate(response, 300),
+			})
+		}()
 
 		// Spec C: After >= 3 Boss messages, enqueue a background self-reflection.
 		// This runs at P3 so it never blocks the Boss's next interaction.

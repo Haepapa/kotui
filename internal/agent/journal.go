@@ -20,8 +20,14 @@ type JournalEntry struct {
 }
 
 // writeJournal persists a journal entry to
-// {agent.JournalDir}/YYYY-MM-DD-HHMM.md
+// {agent.JournalDir}/YYYY-MM-DD-HHMMSS.md
 func writeJournal(paths IdentityPaths, entry JournalEntry) error {
+	return WriteJournal(paths, entry)
+}
+
+// WriteJournal is the exported form of writeJournal, used by tools that write
+// journal entries on behalf of an agent.
+func WriteJournal(paths IdentityPaths, entry JournalEntry) error {
 	if err := os.MkdirAll(paths.JournalDir, 0o755); err != nil {
 		return fmt.Errorf("journal: mkdir: %w", err)
 	}
@@ -39,7 +45,9 @@ func writeJournal(paths IdentityPaths, entry JournalEntry) error {
 		entry.SkillsProposed = "none"
 	}
 
-	filename := entry.Date.UTC().Format("2006-01-02-1504") + ".md"
+	// Use seconds precision to avoid collisions when multiple entries are
+	// written within the same minute (e.g. auto-entry + tool-written entry).
+	filename := entry.Date.UTC().Format("2006-01-02-150405") + ".md"
 	path := filepath.Join(paths.JournalDir, filename)
 
 	content := fmt.Sprintf(`---
