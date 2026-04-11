@@ -607,6 +607,10 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 	}
 
 	// Step 4: Lead produces final summary milestone.
+	// The summary prompt explicitly forbids tool calls so the model does not
+	// attempt to write_journal mid-stream — that would send confusing content
+	// to the frontend and may produce a stale streaming bubble if the second
+	// loop response is poor.
 	o.leadMu.Lock()
 	o.lead.OnRaw = o.channelRawFn("lead")
 	o.vram.NotifyLeadRunning()
@@ -614,7 +618,8 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 		"All sub-tasks are complete. Write a brief, warm summary for the Boss — "+
 			"mention what was accomplished, where any key outputs ended up (e.g. files created), "+
 			"and offer a natural next-step or ask if they'd like to adjust anything. "+
-			"Sound like a colleague wrapping up a task, not a system log.",
+			"Sound like a colleague wrapping up a task, not a system log. "+
+			"Respond with plain conversational text only — do NOT call any tools.",
 		onChunk)
 	o.lead.OnRaw = nil
 	o.leadMu.Unlock()
@@ -636,13 +641,25 @@ func (o *Orchestrator) HandleBossCommand(ctx context.Context, command string, on
 // looksLikeDecomposition returns true if text looks like a plain-text task
 // decomposition that the model forgot to format as JSON. Used to decide
 // whether to attempt a format repair pass.
+//
+// We are intentionally strict here: code explanations, prose answers, and
+// numbered tutorial steps all contain words like "step 1" or "implement",
+// so we require task-specific structural signals and explicitly bail out
+// when the response contains fenced code blocks (which indicate a code
+// answer, not a task plan).
 func looksLikeDecomposition(text string) bool {
+	// Code blocks are a strong negative signal — a p5.js tutorial or shell
+	// script with "step 1" and "implement" must not trigger repair.
+	if strings.Count(text, "```") >= 2 {
+		return false
+	}
 	lower := strings.ToLower(text)
 	signals := []string{
 		"task decomposition", "decompose", "sub-task", "subtask",
-		"t1:", "t2:", "step 1", "step 2",
-		"specialist", "knowledge_base", "file_manager",
-		"proceeding", "query", "execute", "implement",
+		"t1:", "t2:", "task 1:", "task 2:",
+		"assign to specialist", "assign to lead",
+		"knowledge_base", "file_manager",
+		"task list", "here are the tasks",
 	}
 	count := 0
 	for _, s := range signals {
@@ -655,8 +672,11 @@ func looksLikeDecomposition(text string) bool {
 
 // repairTaskList sends a short follow-up asking the model to re-emit its plan
 // as a JSON array. Used when the model produced a valid-looking decomposition
-// but in the wrong format. Uses Turn (non-streaming) since this is invisible.
+// but in the wrong format. Uses Turn (non-streaming) since this is invisible,
+// but does enable OnRaw so the repair API call appears in the activity log.
 func (o *Orchestrator) repairTaskList(ctx context.Context, decomposed string) (string, error) {
+	o.lead.OnRaw = o.channelRawFn("lead")
+	defer func() { o.lead.OnRaw = nil }()
 	repair := fmt.Sprintf(
 		"Your previous response described tasks in plain text, but the system requires a JSON array to execute them. "+
 			"Re-emit your task list NOW as a JSON array on ONE line in exactly this format:\n"+
