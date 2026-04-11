@@ -146,7 +146,40 @@ func TestParseToolCall_BracesInsideStringValue(t *testing.T) {
 	}
 }
 
+// TestParseToolCall_LiteralNewlinesInContent verifies that a tool call whose
+// "content" field contains literal newline bytes (not \n escape sequences) is
+// still parsed correctly after sanitization.
+func TestParseToolCall_LiteralNewlinesInContent(t *testing.T) {
+	// Simulate the model embedding actual newlines in the content string.
+	content := "function setup() {\n    createCanvas(800, 600);\n}\nfunction draw() {\n    background(0);\n}"
+	// Build a raw string with literal newlines inside the JSON value (invalid JSON).
+	text := `{"tool": "file_manager", "args": {"operation": "write", "path": "sketch.js", "content": "` + content + `"}}`
+	call := orchestrator.ExportedParseToolCall(text)
+	if call == nil {
+		t.Fatal("expected tool call with literal newlines in content, got nil")
+	}
+	if call.ToolName != "file_manager" {
+		t.Errorf("expected file_manager, got %q", call.ToolName)
+	}
+	got, _ := call.Args["content"].(string)
+	if !strings.Contains(got, "createCanvas") {
+		t.Errorf("content not preserved after sanitization, got: %q", got)
+	}
+}
 
+// TestParseToolCall_PrefixedWithProse verifies that a tool call preceded by
+// prose text ("Lead plan: {...}") is still detected via the block-scan path.
+func TestParseToolCall_PrefixedWithProse(t *testing.T) {
+	text := `Lead plan: {"tool": "file_manager", "args": {"operation": "write", "path": "out.txt", "content": "hello"}}
+I have written the file.`
+	call := orchestrator.ExportedParseToolCall(text)
+	if call == nil {
+		t.Fatal("expected tool call prefixed with prose to be detected, got nil")
+	}
+	if call.ToolName != "file_manager" {
+		t.Errorf("expected file_manager, got %q", call.ToolName)
+	}
+}
 
 func TestParseEscalation_Detected(t *testing.T) {
 	text := `I cannot handle this task.

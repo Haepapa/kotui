@@ -64,6 +64,9 @@ func parseToolCall(text string) *models.ToolCall {
 		if !strings.HasPrefix(line, "{") {
 			continue
 		}
+		// Sanitize any literal control chars a model may have embedded in
+		// string values before attempting to unmarshal.
+		line = sanitizeJSONControlChars(line)
 		var raw struct {
 			Tool string         `json:"tool"`
 			Args map[string]any `json:"args"`
@@ -117,6 +120,12 @@ func parseToolCallFromBlock(text string) *models.ToolCall {
 	if candidate == "" {
 		return nil
 	}
+
+	// Sanitize literal control characters (newlines, tabs) inside JSON string
+	// values. Models generating multiline file content often embed raw newlines
+	// in the "content" field instead of \n escape sequences, producing invalid
+	// JSON that json.Unmarshal would otherwise reject.
+	candidate = sanitizeJSONControlChars(candidate)
 
 	var raw struct {
 		Tool string         `json:"tool"`
@@ -180,6 +189,53 @@ func extractJSONObject(text string) string {
 		}
 	}
 	return ""
+}
+
+// sanitizeJSONControlChars replaces literal control characters (newline, carriage
+// return, tab) that appear inside JSON string values with their proper escape
+// sequences. This fixes tool calls emitted by models that put raw newlines inside
+// multiline file-content strings rather than writing \n escape sequences.
+//
+// Characters outside of string values are left untouched so that structural
+// whitespace is preserved.
+func sanitizeJSONControlChars(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inString := false
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if escaped {
+			escaped = false
+			b.WriteByte(c)
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			b.WriteByte(c)
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			b.WriteByte(c)
+			continue
+		}
+		if inString {
+			switch c {
+			case '\n':
+				b.WriteString(`\n`)
+			case '\r':
+				b.WriteString(`\r`)
+			case '\t':
+				b.WriteString(`\t`)
+			default:
+				b.WriteByte(c)
+			}
+		} else {
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // extractThinkBlocks separates <think>...</think> content from the main response.
